@@ -6,7 +6,6 @@
 #include <string.h>
 #include <stddef.h>
 
-#include "pin.h"
 #include "zcore.h"
 
 //externals
@@ -20,7 +19,6 @@ unsigned long OSC_Clock=1000000L;
 //USART service
 static unsigned char USART_rbuf[300];
 static int USART_rbufw=0,USART_rbufr=0;
-unsigned char USART_flag=0;
 void USART_isr(){
     char c;
     if(PIR1bits.RCIF==0) return;
@@ -83,21 +81,17 @@ int USART_purge(unsigned char *s){
             if((signed char)(TMR0_count-wdt)<3) continue;
             else if(l>0){
                 if(strstr(r,s)!=NULL){
-                    if(USART_flag&1){
-                        VSO_puts("//purge delayed/");
-                        VSO_puts(s);
-                        VSO_cr();
-                    }
+                    VSO_puts("//purge delayed/");
+                    VSO_puts(s);
+                    VSO_cr();
                     return 0;
                 }
             }
-            if(USART_flag&1){
-                VSO_puts("//purge timeout ");
-                VSO_puts(s);
-                VSO_puts("/");
-                VSO_puts(r);
-                VSO_cr();
-            }
+            VSO_puts("//purge timeout ");
+            VSO_puts(s);
+            VSO_puts("/");
+            VSO_puts(r);
+            VSO_cr();
             return -1;
         }
         wdt=TMR0_count;
@@ -111,21 +105,17 @@ int USART_purge(unsigned char *s){
             
         }
         if(strstr(r,s)!=NULL){
-            if(USART_flag&1){
-                VSO_puts("//purge done ");
-                VSO_puts(s);
-                VSO_cr();
-            }
+            VSO_puts("//purge done ");
+            VSO_puts(s);
+            VSO_cr();
             return 0;
         }
         else if(a<0x10){
-            if(USART_flag&1){
-                VSO_puts("//purge skip ");
-                VSO_puts(s);
-                VSO_puts("/");
-                VSO_puts(r);
-                VSO_cr();
-            }
+            VSO_puts("//purge skip ");
+            VSO_puts(s);
+            VSO_puts("/");
+            VSO_puts(r);
+            VSO_cr();
             r[0]=0;
         }
     }

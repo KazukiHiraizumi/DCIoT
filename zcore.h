@@ -5,6 +5,37 @@
 extern "C" {
 #endif
 
+//MPU Operation Condition
+#define _XTAL_FREQ 16000000  //Clock
+
+/** CONFIGURATION Bits **********************************************/
+#pragma config FOSC     = INTIO67
+#pragma config PRICLKEN = ON
+#pragma config FCMEN    = OFF
+#pragma config IESO     = OFF
+#pragma config PWRTEN   = ON
+#pragma config BOREN    = SBORDIS
+#pragma config BORV     = 18
+#pragma config WDTEN    = OFF
+#pragma config WDTPS    = 1024
+#pragma config CCP2MX   = PORTC1
+#pragma config PBADEN   = OFF
+#pragma config HFOFST   = OFF
+#pragma config MCLRE    = EXTMCLR
+#pragma config STVREN   = ON
+#pragma config LVP      = OFF
+
+//USART
+#define USART_TxTRIS TRISCbits.TRISC6
+#define USART_Tx LATCbits.LC6
+#define USART_RxTRIS TRISCbits.TRISC7
+#define USART_Rx PORTCbits.RC7
+
+//Virtual Serial
+#define VSO_Tx LATBbits.LB6
+#define VSO_TxTRIS TRISBbits.RB6
+
+//Functions
 extern unsigned char USART_flag;
 extern void USART_init(unsigned long bps);
 extern void USART_clr();
@@ -46,5 +77,4 @@ extern void E2ROM_write(int adds,int val);
 }
 #endif
 
-#endif	/* ZCORE_H */
-
+#endif

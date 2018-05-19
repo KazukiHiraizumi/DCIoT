@@ -8,21 +8,22 @@
 #include <stddef.h>
 
 #include "zcore.h"
-#include "pin.h"
-#include "app.h"
+#include "ble.h"
 
-#define Revision  "2.42B"
-
-__EEPROM_DATA(2|4|8,0,20,170,60,125,99,0);
-__EEPROM_DATA(0,0,0,0,0,0,0,0);
+#define Revision  "0.1"
 
 #define IdCommon  "F5B0E88109AB42000BA24F83"
 #define IdService "10014246"
-#define IdCharOld "20014246"
 #define IdCharRead "20034246"
 #define IdCharWrite "20044246"
 
 #define Prompt  "CMD>"
+
+//IOs
+#define TR_LEADSW   TRISCbits.RC1
+#define DI_LEADSW   PORTCbits.RC1
+#define DO_LAMP     LATBbits.LB0
+#define TR_LAMP     TRISBbits.RB0
 
 static unsigned char rnbuf[50];//comm buffer to/from RN4xxx
 static unsigned char deviceID[15];
@@ -60,7 +61,7 @@ int rn487x_cmd(){
     xdelay(50);
     rn487x_prog("$$$");
     xdelay(100);
-    if(USART_flag&16) rn487x_prog("+\n");
+    rn487x_prog("+\n");//echo on
     return 0;
 }
 int rn487x_reset(int adv){
@@ -90,17 +91,11 @@ void setup(){
     unsigned long bps=0;
     OSC_init(_XTAL_FREQ);
 Restart:
-    OSC_init(16000000L);
     USART_init(bps=115200);
     TMR0_init();
     VSO_init();
     VSO_puts("//Setup LV1\n");
-    USART_flag=E2ROM_read(EE_WFLAG);
     TR_RXIND=0;
-    if(rn487x_reboot()==0) goto Reset;
-    USART_init(bps=19200);
-    if(rn487x_reboot()==0) goto Reset;
-    USART_init(bps=2400);
     if(rn487x_reboot()==0) goto Reset;
     goto Restart;
 Reset:
@@ -108,19 +103,11 @@ Reset:
     rn487x_prog("NA,Z\n");
     rn487x_prog("PZ\n");
     rn487x_prog("ST,0050,0100,0002,0064\n");//interval,latecy,timeout
-    rn487x_prog("S-,BF28\n");
-    rn487x_prog("SN,BF28\n");
-//    rn487x_prog("SR,0000\n");
-//    rn487x_prog("SS,00\n");
-//    rn487x_prog("SA,2\n");
-//    rn487x_prog("SP,000000\n");
+    rn487x_prog("S-,DCIoT\n");
+    rn487x_prog("SN,DCIoT\n");
     rn487x_prog("SO,1\n"); //enable sleep mode
-    rn487x_prog("SB,07\n");//19200bps
+//  rn487x_prog("SB,03\n");//default 115200
     xdelay(30);
-    USART_init(19200);
-    if(rn487x_reboot()<0) goto Restart;
-    OSC_init(_XTAL_FREQ);
-    USART_init(19200);
     TMR0_init();
     VSO_init();
     VSO_puts("//Setup LV2\n");
@@ -129,18 +116,10 @@ Reset:
     USART_purge("BTA=");
     deviceID[0]=0; while(USART_gets(deviceID,0)<0); deviceID[12]=0;
     USART_purge(Prompt);
-//Adv payload
-    if(strncmp(deviceID,"00",2)==0){
-        rn487x_prog("S:,0000,3412F03980D8\n");
-        rn487x_reboot();
-     }
 //Private service
     rn487x_prog("PS,"IdService""IdCommon"\n");
-    rn487x_prog("PC,"IdCharOld""IdCommon",1A,14\n");//Read,Write,Notify
     rn487x_prog("PC,"IdCharRead""IdCommon",1A,14\n");//Read,Write,Notify
     rn487x_prog("PC,"IdCharWrite""IdCommon",18,0C\n");//Write
-    rn487x_prog("SB,07\n");//19200bps
-    rn487x_reboot();
     VSO_puts("//deviceID/");VSO_puts(deviceID);VSO_cr();
     USART_purge(Prompt);
     rn487x_prog("LS\n");
@@ -168,14 +147,11 @@ SLEEP:
     }
 SLEEP_LOOP:
     Sleep();
-//  goto DATASAMP;
-//  goto ADVERTISE;
 ADVERTISE:
     ModQ=1;
     VSO_puts("//Adv mode\n");
     rn487x_reset(1);//reset and keep advertise beacon on
     rn487x_prog("IA,Z\n");
-    USART_putSHW(CH_STAT);XSART_putd(aflag);USART_cr();
     USART_purge(Prompt);
     rn487x_adv();
     DO_RXIND=1;
@@ -214,7 +190,7 @@ CONNECT_LOOP:
     k=USART_gets(rnbuf,'%');
     if(DI_STAT1 || DI_STAT2){//Disconnected
         rn487x_vda();
-        VSO_puts("//Disconnected/");VSO_putd(retry_cycle);VSO_puts("/");VSO_putd(E2ROM_read(EE_RSTCNT));VSO_cr();
+        VSO_puts("//Disconnected/");VSO_cr();
         Timer[0]=Timer[2]=0;
         ModQ=0;
     }
@@ -273,11 +249,8 @@ void WV_do(char *rs){
     char s[15];
     USART_flagSHW=0;
     int h=XSART_parse(rs,s);//chara handle
-    logger_catch(rs);
     sprintf(rnbuf,"SHW,%04X,",CH_STAT);
     switch(h){
-    case CH_HYS:
-        break;
     case CH_STAT:
         switch(*s){
         case 'U':
@@ -317,19 +290,8 @@ void WV_do(char *rs){
             break;
         case 'W':
             h=s[1]-'0';
-            E2ROM_write(h,strtoul(s+2,NULL,16));
             USART_putSHW(CH_STAT);
             XSART_putd(h);
-            XSART_puts("/");
-            XSART_putd(E2ROM_read(h));
-            break;
-        case 'T':
-            tflag=atoi(s+1);
-            hys_pattern=0;
-            if(tflag&1) hys_pattern=0xF0000000L;
-            if(tflag&2){
-                t2_rep=0;
-            }
             break;
         }
         break;

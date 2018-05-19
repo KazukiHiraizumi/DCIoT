@@ -1,24 +1,5 @@
-#ifndef APP_H
-#define	APP_H
-
-#ifdef	__cplusplus
-extern "C" {
-#endif
-
-//MPU Operation Condition
-#define _XTAL_FREQ 16000000  //Clock
-
-/** CONFIGURATION Bits **********************************************/
-#pragma config FEXTOSC  = OFF
-#pragma config FCMEN    = OFF
-#pragma config MCLRE    = INTMCLR
-#pragma config PWRTS    = PWRT_64
-#pragma config BOREN    = NOSLP
-#pragma config BORV     = VBOR_245
-#pragma config WDTE     = OFF
-#pragma config WDTCPS   = WDTCPS_31
-#pragma config CCP2MX   = PORTC
-#pragma config LVP      = OFF
+#ifndef BLECMD_H
+#define	BLECMD_H
 
 extern int hex2byte(char *);//convert 2 character hex string to int
 extern int hex2str(char *src,char *dest); //convert hex string to ascii string
@@ -48,19 +29,11 @@ extern void USART_putSHW(int x);
 #define TR_RESET    TRISBbits.RB2
 #define DO_RXIND    LATBbits.LB1
 #define TR_RXIND    TRISBbits.RB1
-#define TR_LEADSW   TRISCbits.RC1
-#define DI_LEADSW   PORTCbits.RC1
-#define DO_LAMP     LATBbits.LB0
-#define TR_LAMP     TRISBbits.RB0
 #define DI_STAT1    PORTBbits.RB4
 #define DI_STAT2    PORTBbits.RB5
-
-//E2ROM
-#define EE_BFLAG    0
-#define EE_WFLAG    1
 
 #ifdef	__cplusplus
 }
 #endif
 
-#endif	/* APP_H */
+#endif
