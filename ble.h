@@ -20,17 +20,17 @@ extern int USART_flagSHW;
 extern void USART_putSHW(int x);
 
 //Characteristic Handles
-#define CH_HYS 0x0072
+#define CH_LOG 0x0072
 #define CH_STAT 0x0075
 #define CH_CMD 0x0078
 //IOs
-#define DI_RESET    PORTBbits.RB2
-#define DO_RESET    LATBbits.LB2
-#define TR_RESET    TRISBbits.RB2
-#define DO_RXIND    LATBbits.LB1
-#define TR_RXIND    TRISBbits.RB1
-#define DI_STAT1    PORTBbits.RB4
-#define DI_STAT2    PORTBbits.RB5
+//#define DI_RESET    PORTCbits.RC2
+#define DO_RESET    LATCbits.LC2
+#define TR_RESET    TRISCbits.RC2
+#define DO_RXIND    LATCbits.LC3
+#define TR_RXIND    TRISCbits.RC3
+#define DI_STAT1    PORTCbits.RC4
+#define DI_STAT2    PORTCbits.RC5
 
 #ifdef	__cplusplus
 }

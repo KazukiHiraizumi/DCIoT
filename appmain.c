@@ -14,14 +14,14 @@
 
 #define IdCommon  "F5B0E88109AB42000BA24F83"
 #define IdService "10014246"
-#define IdCharRead "20034246"
-#define IdCharWrite "20044246"
-
-#define Prompt  "CMD>"
+#define IdCharLogger "20024246"
+#define IdCharResponse "20034246"
+#define IdCharRequest "20044246"
+#define Prompt "CMD>"
 
 //IOs
-#define TR_LEADSW   TRISCbits.RC1
-#define DI_LEADSW   PORTCbits.RC1
+#define TR_LEADSW   TRISBbits.RB2
+#define DI_LEADSW   PORTBbits.RB2
 #define DO_LAMP     LATBbits.LB0
 #define TR_LAMP     TRISBbits.RB0
 
@@ -58,6 +58,7 @@ void rn487x_vda(){//stop advertize
 }
 int rn487x_cmd(){
     DO_RXIND=0;
+    TR_RXIND=0;
     xdelay(50);
     rn487x_prog("$$$");
     xdelay(100);
@@ -66,16 +67,16 @@ int rn487x_cmd(){
 }
 int rn487x_reset(int adv){
     DO_RXIND=1;
+    TR_RXIND=0;
     xdelay(50);
-    while(!DI_RESET){
-        VSO_puts("RN487x external reset\n");
-        WDTCONbits.SWDTEN=1;
-        Sleep();
-        WDTCONbits.SWDTEN=0;
-    }
+//    while(!DI_RESET){//If ResetIC impremented
+//       VSO_puts("RN487x external reset\n");
+//        xdelay(1000);
+//        VSO_puts("RN487x reset waiting\n");
+//    }
     TR_RESET=0;
     DO_RESET=0;
-    xdelay(10);
+    xdelay(100);
     DO_RESET=1;
     TR_RESET=1;
     if(USART_purge("%REBOOT")==0){
@@ -88,14 +89,12 @@ int rn487x_reset(int adv){
 int rn487x_reboot(){ return rn487x_reset(0);}
 void setup(){
     int i,j,k;
-    unsigned long bps=0;
     OSC_init(_XTAL_FREQ);
 Restart:
-    USART_init(bps=115200);
+    USART_init(115200L);
     TMR0_init();
     VSO_init();
     VSO_puts("//Setup LV1\n");
-    TR_RXIND=0;
     if(rn487x_reboot()==0) goto Reset;
     goto Restart;
 Reset:
@@ -107,7 +106,11 @@ Reset:
     rn487x_prog("SN,DCIoT\n");
     rn487x_prog("SO,1\n"); //enable sleep mode
 //  rn487x_prog("SB,03\n");//default 115200
+    rn487x_prog("SW,0B,07\n");//P13 as Status-1
+    rn487x_prog("SW,0A,08\n");//P12 as Status-2
+    rn487x_reboot();
     xdelay(30);
+ 
     TMR0_init();
     VSO_init();
     VSO_puts("//Setup LV2\n");
@@ -116,15 +119,19 @@ Reset:
     USART_purge("BTA=");
     deviceID[0]=0; while(USART_gets(deviceID,0)<0); deviceID[12]=0;
     USART_purge(Prompt);
+    VSO_puts("//deviceID/");VSO_puts(deviceID);VSO_cr();
 //Private service
     rn487x_prog("PS,"IdService""IdCommon"\n");
-    rn487x_prog("PC,"IdCharRead""IdCommon",1A,14\n");//Read,Write,Notify
-    rn487x_prog("PC,"IdCharWrite""IdCommon",18,0C\n");//Write
-    VSO_puts("//deviceID/");VSO_puts(deviceID);VSO_cr();
-    USART_purge(Prompt);
+    rn487x_prog("PC,"IdCharLogger""IdCommon",1A,14\n");
+    rn487x_prog("PC,"IdCharResponse""IdCommon",1A,14\n");//Read,Write,Notify
+    rn487x_prog("PC,"IdCharRequest""IdCommon",18,14\n");//Write
     rn487x_prog("LS\n");
+    USART_shrink();
     rn487x_prog("V\n");
-//    rn487x_prog("WR\n");
+    rn487x_prog("V\n");
+    rn487x_prog("V\n");
+    rn487x_prog("V\n");
+    rn487x_prog("V\n");
 //App inits
 }
 
@@ -145,8 +152,33 @@ SLEEP:
         rn487x_reboot();
         goto SLEEP;
     }
+    TMR0_cemaphore=0;
+    Timer[3]=1;
 SLEEP_LOOP:
+    WDTCONbits.SWDTEN=1;
     Sleep();
+    WDTCONbits.SWDTEN=0;
+    Timer_do();
+//    if(TMR0_cemaphore){
+//        Timer_do();
+//        TMR0_cemaphore--;
+//    }
+    if(!DI_STAT1 && !DI_STAT2){
+        ModQ=2;
+    }
+    switch(ModQ){
+    case 1:
+        DO_RXIND=0;
+        USART_purge("%REBOOT");
+        rn487x_cmd();
+        goto ADVERTISE;
+    case 2:
+        DO_RXIND=0;
+        USART_purge("%REBOOT");
+        rn487x_cmd();
+        goto CONNECT;
+    }
+    goto SLEEP_LOOP;
 ADVERTISE:
     ModQ=1;
     VSO_puts("//Adv mode\n");
@@ -224,6 +256,7 @@ CONNECT_LOOP:
 }
 void Timer_do(){
     int cflag,otim,ctim;
+    VSO_puts("//Timer Do\n");
 T0UP:
     if(Timer[0]==0) goto T1UP; else if(--Timer[0]>0) goto T1UP;
     if(ModQ==2) ModQ=99; //reset
@@ -239,6 +272,10 @@ T2UP://disconnect timer
     }
 T3UP://cover scan
     if(Timer[3]==0) goto T4UP; else if(--Timer[3]>0) goto T4UP;
+    if(ModQ==0){
+        if(DI_LEADSW) ModQ=1;
+    }
+    Timer[3]=1;
 T4UP://auto advertise timer
     if(Timer[4]==0) goto T5UP; else if(--Timer[4]>0) goto T5UP;
 T5UP:

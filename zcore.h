@@ -6,7 +6,7 @@ extern "C" {
 #endif
 
 //MPU Operation Condition
-#define _XTAL_FREQ 16000000  //Clock
+#define _XTAL_FREQ 16000000L  //Clock
 
 /** CONFIGURATION Bits **********************************************/
 #pragma config FOSC     = INTIO67
@@ -16,12 +16,12 @@ extern "C" {
 #pragma config PWRTEN   = ON
 #pragma config BOREN    = SBORDIS
 #pragma config BORV     = 18
-#pragma config WDTEN    = OFF
-#pragma config WDTPS    = 1024
+#pragma config WDTEN    = SWON
+#pragma config WDTPS    = 256
 #pragma config CCP2MX   = PORTC1
 #pragma config PBADEN   = OFF
 #pragma config HFOFST   = OFF
-#pragma config MCLRE    = EXTMCLR
+#pragma config MCLRE    = INTMCLR
 #pragma config STVREN   = ON
 #pragma config LVP      = OFF
 
@@ -30,20 +30,29 @@ extern "C" {
 #define USART_Tx LATCbits.LC6
 #define USART_RxTRIS TRISCbits.TRISC7
 #define USART_Rx PORTCbits.RC7
+    
+//USART2
+#ifdef TXREG2
+#define USART2_TxTRIS TRISBbits.TRISB6
+#define USART2_Tx LATBbits.LB6
+#define USART2_RxTRIS TRISBbits.TRISB7
+#define USART2_Rx PORTBbits.RB7
+#endif
 
 //Virtual Serial
-#define VSO_Tx LATBbits.LB6
-#define VSO_TxTRIS TRISBbits.RB6
+#define VSO_Tx LATCbits.LC0
+#define VSO_TxTRIS TRISCbits.RC0
 
 //Functions
 extern unsigned char USART_flag;
 extern void USART_init(unsigned long bps);
+extern void USART_shrink();//Shrink work area
 extern void USART_clr();
 extern void USART_putc(unsigned char);
 extern void USART_puts(unsigned char *);
 extern int USART_getc();
 extern int USART_gets(unsigned char *,unsigned char);
-extern int USART_purge(unsigned char *);
+extern int USART_purge(const unsigned char *);
 extern int USART_grep(unsigned char *,unsigned char *);
 extern void TMR0_init();
 extern void TMR0_clr();

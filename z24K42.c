@@ -15,28 +15,29 @@ extern void loop();
 //Globals
 unsigned long OSC_Clock=1000000L;
 //unsigned long USART_BPS=115200L;
+unsigned char work_buffer[1000];
 
 //USART service
-static unsigned char USART_rbuf[300];
-static int USART_rbufw=0,USART_rbufr=0;
+static unsigned char *USART_rbuf=work_buffer;
+static int USART_rbufw=0,USART_rbufr=0,USART_rbufsz=500;
 void USART_isr(){
     char c;
-    if(PIR1bits.RCIF==0) return;
-    if(RCSTAbits.OERR){  // in case of overrun error
-        RCSTAbits.CREN=0;  // reset the port
-        c=RCREG;
-        RCSTAbits.CREN=1;  // and keep going.
+    if(PIR1bits.RC1IF==0) return;
+    if(RCSTA1bits.OERR){  // in case of overrun error
+        RCSTA1bits.CREN=0;  // reset the port
+        c=RCREG1;
+        RCSTA1bits.CREN=1;  // and keep going.
     }
-    else c=RCREG;
+    else c=RCREG1;
     USART_rbuf[USART_rbufw++]=c;
-    if(USART_rbufw>=sizeof(USART_rbuf)) USART_rbufw=0;
+    if(USART_rbufw>=USART_rbufsz) USART_rbufw=0;
 }
 void USART_clr(){
     USART_rbufw=USART_rbufr=0;
 }
 void USART_putc(unsigned char c){
-    while(!TXSTAbits.TRMT);
-    TXREG = c;
+    while(!TXSTA1bits.TRMT);
+    TXREG1 = c;
 }
 void USART_puts(unsigned char *s){
     for(;*s;s++) USART_putc(*s);
@@ -44,7 +45,7 @@ void USART_puts(unsigned char *s){
 int USART_getc(){
     if(USART_rbufw!=USART_rbufr){
         int a=USART_rbuf[USART_rbufr++];
-        if(USART_rbufr>=sizeof(USART_rbuf)) USART_rbufr=0;
+        if(USART_rbufr>=USART_rbufsz) USART_rbufr=0;
         return a;
     }
     else return -1;
@@ -70,7 +71,7 @@ int USART_gets(unsigned char *s,unsigned char eos){
         return -1;
     }
 }
-int USART_purge(unsigned char *s){
+int USART_purge(const unsigned char *s){
     unsigned char wdt=TMR0_count;
     char r[50];
     r[0]=0;
@@ -134,25 +135,29 @@ int USART_grep(unsigned char *r,unsigned char *s){
 }
 void USART_init(unsigned long bps){
     unsigned short brg=OSC_Clock/4/bps-1;
-    TXSTAbits.BRGH=1;
-    BAUDCONbits.BRG16=1;
-    SPBRG=brg&0xFF;
-    SPBRGH=brg>>8;
+    TXSTA1bits.BRGH=1;
+    BAUDCON1bits.BRG16=1;
+    SPBRG1=brg&0xFF;
+    SPBRGH1=brg>>8;
 //  BAUDCONbits.DTRXP=1; //Invert Rx
 //H/W USART
     USART_Tx=1;
     USART_TxTRIS=0;
     USART_RxTRIS=1;
-    TXSTAbits.TXEN=1;
-    RCSTAbits.CREN=0;
-    RCSTAbits.SPEN=1;
-    PIE1bits.RCIE=1;
+    TXSTA1bits.TXEN=1;
+    RCSTA1bits.CREN=0;
+    RCSTA1bits.SPEN=1;
+    PIE1bits.RC1IE=1;
     INTCONbits.PEIE=1;
     INTCONbits.GIE=1;
-    PIR1bits.RCIF=0;
+    PIR1bits.RC1IF=0;
     USART_clr();
-    char c=RCREG;//clear FERR
-    RCSTAbits.CREN=1;
+    char c=RCREG1;//clear FERR
+    RCSTA1bits.CREN=1;
+}
+void USART_shrink(){
+    USART_rbufsz=100;
+    USART_rbufw=USART_rbufr=0;    
 }
 //TMR service
 unsigned char TMR0_cemaphore=0;
@@ -215,7 +220,7 @@ void TMR1_init(){
     T1CONbits.TMR1CS=0;
 }
 //Virtual Serial Out service only 2400 bps
-#define VSOBPS  2400
+#define VSOBPS  9600
 unsigned short VSO_dt[10];
 unsigned short VSO_ts(){
     unsigned short tl=TMR0L;
@@ -318,11 +323,93 @@ void E2ROM_write(int a,int d){
     EECON1bits.WREN=0;
 }
 
+//USART-2 service
+#ifdef TXREG2
+static unsigned char *USART2_rbuf=work_buffer+100;
+static int USART2_rbufw=0,USART2_rbufr=0,USART2_rbufsz=100;
+void USART2_isr(){
+    char c;
+    if(PIR3bits.RC2IF==0) return;
+    if(RCSTA2bits.OERR){  // in case of overrun error
+        RCSTA2bits.CREN=0;  // reset the port
+        c=RCREG2;
+        RCSTA2bits.CREN=1;  // and keep going.
+    }
+    else c=RCREG2;
+    USART2_rbuf[USART2_rbufw++]=c;
+    if(USART2_rbufw>=USART2_rbufsz) USART2_rbufw=0;
+}
+void USART2_clr(){
+    USART2_rbufw=USART2_rbufr=0;
+}
+void USART2_putc(unsigned char c){
+    while(!TXSTA2bits.TRMT);
+    TXREG2 = c;
+}
+void USART2_puts(unsigned char *s){
+    for(;*s;s++) USART2_putc(*s);
+}
+int USART2_getc(){
+    if(USART2_rbufw!=USART2_rbufr){
+        int a=USART_rbuf[USART2_rbufr++];
+        if(USART2_rbufr>=USART2_rbufsz) USART2_rbufr=0;
+        return a;
+    }
+    else return -1;
+}
+int USART2_gets(unsigned char *s,unsigned char eos){
+    int a=USART2_getc();
+    int n=strlen(s);
+    if(a<0){
+        return -1;
+    }
+    else{
+        if(a<0x10){
+            if(n>0){
+                return 0;
+            }
+            else return -1;
+        }
+        s[n]=a;
+        s[n+1]=0;
+        if(eos){
+            if(a==eos) return 1;
+        }
+        return -1;
+    }
+}
+void USART2_init(unsigned long bps){
+    unsigned short brg=OSC_Clock/4/bps-1;
+    TXSTA2bits.BRGH=1;
+    BAUDCON2bits.BRG16=1;
+    SPBRG2=brg&0xFF;
+    SPBRGH2=brg>>8;
+    USART2_Tx=1;
+    USART2_TxTRIS=0;
+    USART2_RxTRIS=1;
+    TXSTA2bits.TXEN=1;
+    RCSTA2bits.CREN=0;
+    RCSTA2bits.SPEN=1;
+    PIE3bits.RC2IE=1;
+//    INTCONbits.PEIE=1;
+//    INTCONbits.GIE=1;
+    PIR3bits.RC2IF=0;
+    USART2_clr();
+    char c=RCREG2;//clear FERR
+    RCSTA2bits.CREN=1;
+}
+#endif
+
 void main(){
     int i=0;
-//  ANSEL=0;
-//  ANSELH=0;
+    ANSELA=0;
+    ANSELB=0;
+    ANSELC=0;
+    
     USART_clr();
+#ifdef TXREG2
+    USART2_clr();
+#endif
     setup();
     while(1) loop();
 }
@@ -331,4 +418,7 @@ void interrupt SYS_InterruptHigh(void){
     TMR0_isr();
     TMR1_isr();
     USART_isr();
+#ifdef TXREG2
+    USART2_isr();
+#endif
 }
