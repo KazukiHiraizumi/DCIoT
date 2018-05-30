@@ -44,6 +44,7 @@ extern "C" {
 #define VSO_TxTRIS TRISCbits.RC0
 
 //Functions
+extern unsigned char __verbose;
 extern unsigned char USART_flag;
 extern void USART_init(unsigned long bps);
 extern void USART_shrink();//Shrink work area

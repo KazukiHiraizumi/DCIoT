@@ -18,6 +18,7 @@ unsigned long OSC_Clock=1000000L;
 unsigned char work_buffer[1000];
 
 //USART service
+unsigned char __verbose=1;
 static unsigned char *USART_rbuf=work_buffer;
 static int USART_rbufw=0,USART_rbufr=0,USART_rbufsz=500;
 void USART_isr(){
@@ -82,17 +83,21 @@ int USART_purge(const unsigned char *s){
             if((signed char)(TMR0_count-wdt)<3) continue;
             else if(l>0){
                 if(strstr(r,s)!=NULL){
-                    VSO_puts("//purge delayed/");
-                    VSO_puts(s);
-                    VSO_cr();
+                    if(__verbose){
+                        VSO_puts("//purge delayed/");
+                        VSO_puts(s);
+                        VSO_cr();
+                    }
                     return 0;
                 }
             }
-            VSO_puts("//purge timeout ");
-            VSO_puts(s);
-            VSO_puts("/");
-            VSO_puts(r);
-            VSO_cr();
+            if(__verbose){
+                VSO_puts("//purge timeout ");
+                VSO_puts(s);
+                VSO_puts("/");
+                VSO_puts(r);
+                VSO_cr();
+            }
             return -1;
         }
         wdt=TMR0_count;
@@ -106,17 +111,21 @@ int USART_purge(const unsigned char *s){
             
         }
         if(strstr(r,s)!=NULL){
-            VSO_puts("//purge done ");
-            VSO_puts(s);
-            VSO_cr();
+            if(__verbose){
+                VSO_puts("//purge done ");
+                VSO_puts(s);
+                VSO_cr();
+            }
             return 0;
         }
         else if(a<0x10){
-            VSO_puts("//purge skip ");
-            VSO_puts(s);
-            VSO_puts("/");
-            VSO_puts(r);
-            VSO_cr();
+            if(__verbose){
+                VSO_puts("//purge skip ");
+                VSO_puts(s);
+                VSO_puts("/");
+                VSO_puts(r);
+                VSO_cr();
+            }
             r[0]=0;
         }
     }
@@ -156,7 +165,7 @@ void USART_init(unsigned long bps){
     RCSTA1bits.CREN=1;
 }
 void USART_shrink(){
-    USART_rbufsz=100;
+    USART_rbufsz=64;
     USART_rbufw=USART_rbufr=0;    
 }
 //TMR service
@@ -189,7 +198,10 @@ void TMR0_init(){
     INTCONbits.GIE=1;
     INTCONbits.TMR0IF=0;
 }
-void TMR0_on(){T0CONbits.TMR0ON=1;}
+void TMR0_on(){
+	TMR0_clr();
+	T0CONbits.TMR0ON=1;
+}
 void TMR0_off(){T0CONbits.TMR0ON=0;}
 void TMR0_clr(){
     TMR0H=0;
@@ -228,6 +240,7 @@ unsigned short VSO_ts(){
     return tl+(th<<8);
 }
 void VSO_putc(unsigned char c){
+    
     unsigned short tb=VSO_ts(),tn;
     VSO_Tx=0;
     tn=tb+VSO_dt[0];
@@ -326,7 +339,7 @@ void E2ROM_write(int a,int d){
 //USART-2 service
 #ifdef TXREG2
 static unsigned char *USART2_rbuf=work_buffer+100;
-static int USART2_rbufw=0,USART2_rbufr=0,USART2_rbufsz=100;
+static int USART2_rbufw=0,USART2_rbufr=0,USART2_rbufsz=64;
 void USART2_isr(){
     char c;
     if(PIR3bits.RC2IF==0) return;

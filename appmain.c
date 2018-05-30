@@ -12,18 +12,19 @@
 
 #define Revision  "0.1"
 
-#define IdCommon  "F5B0E88109AB42000BA24F83"
-#define IdService "10014246"
+#define IdCommon  "f5b0e88109ab42000ba24f83"
+#define IdServicePri "10014246"
 #define IdCharLogger "20024246"
 #define IdCharResponse "20034246"
 #define IdCharRequest "20044246"
+#define IdServiceSec "10024246"
 #define Prompt "CMD>"
 
 //IOs
 #define TR_LEADSW   TRISBbits.RB2
 #define DI_LEADSW   PORTBbits.RB2
-#define DO_LAMP     LATBbits.LB0
-#define TR_LAMP     TRISBbits.RB0
+#define DO_LED      LATCbits.LC1
+#define TR_LED      TRISCbits.RC1
 
 static unsigned char rnbuf[50];//comm buffer to/from RN4xxx
 static unsigned char deviceID[15];
@@ -45,14 +46,14 @@ void rn487x_prog(char *s){
     USART_puts(s);
     USART_purge(Prompt);
 }
-void rn487x_adv(){
+void rn487x_aload(){
     rn487x_prog("IA,01,06\n");//ad type flag
     USART_puts("IA,09,");XSART_puts(deviceID+8);USART_cr();//set LocalName(09) as BF11xxxx
     USART_purge(Prompt);
-    USART_puts("IA,07,");USART_2stup(IdService""IdCommon);USART_cr();//set 128bits UUID(06)
+    USART_puts("IA,07,");USART_2stup(IdServicePri""IdCommon);USART_cr();//set 128bits UUID(06)
+    USART_purge(Prompt);
 }
-void rn487x_vda(){//stop advertize
-    USART_puts("IA,Z\n");
+void rn487x_aoff(){//stop advertize
     USART_puts("A,0100,0001\n");
     USART_purge("%ADV_TIMEOUT");
 }
@@ -81,7 +82,8 @@ int rn487x_reset(int adv){
     TR_RESET=1;
     if(USART_purge("%REBOOT")==0){
         rn487x_cmd();
-        if(!adv) rn487x_vda();
+        if(!adv) rn487x_aoff();
+        else USART_puts("A,0100\n");
         return 0;
     }
     else return -1;
@@ -100,6 +102,12 @@ Restart:
 Reset:
     rn487x_prog("U\n");
     rn487x_prog("NA,Z\n");
+    rn487x_prog("NA,01,06\n");//ad type flag
+  //  USART_puts("NA,09,");XSART_puts(deviceID+8);USART_cr();//set LocalName(09) as BF11xxxx
+    USART_puts("NA,09,");XSART_puts("DCIoT");USART_cr();//set LocalName(09) as BF11xxxx
+    USART_purge(Prompt);
+    USART_puts("NA,07,");USART_2stup(IdServicePri""IdCommon);USART_cr();//set 128bits UUID(06)
+    USART_purge(Prompt);
     rn487x_prog("PZ\n");
     rn487x_prog("ST,0050,0100,0002,0064\n");//interval,latecy,timeout
     rn487x_prog("S-,DCIoT\n");
@@ -121,91 +129,44 @@ Reset:
     USART_purge(Prompt);
     VSO_puts("//deviceID/");VSO_puts(deviceID);VSO_cr();
 //Private service
-    rn487x_prog("PS,"IdService""IdCommon"\n");
-    rn487x_prog("PC,"IdCharLogger""IdCommon",1A,14\n");
-    rn487x_prog("PC,"IdCharResponse""IdCommon",1A,14\n");//Read,Write,Notify
-    rn487x_prog("PC,"IdCharRequest""IdCommon",18,14\n");//Write
+    rn487x_prog("PS,"IdServicePri""IdCommon"\n");
+    rn487x_prog("PC,"IdCharLogger""IdCommon",1A,10\n");
+    rn487x_prog("PC,"IdCharResponse""IdCommon",1A,10\n");//Read,Write,Notify
+    rn487x_prog("PC,"IdCharRequest""IdCommon",18,10\n");//Write
     rn487x_prog("LS\n");
     USART_shrink();
-    rn487x_prog("V\n");
-    rn487x_prog("V\n");
-    rn487x_prog("V\n");
-    rn487x_prog("V\n");
     rn487x_prog("V\n");
 //App inits
 }
 
 void loop(){
     int i,j,k;
-SLEEP:
-    ModQ=0;
-    VSO_puts("//Sleep mode/");
-    VSO_putd(DI_STAT1);
-    VSO_puts("/");
-    VSO_putd(DI_STAT2);
-    VSO_cr();
-    DO_RXIND=1;
-    USART_puts("O,0\n"); //goto sleep
-    __delay_ms(100);
-    if(!DI_STAT1 || !DI_STAT2){
-        VSO_puts("//Sleep error. Try reboot...");
-        rn487x_reboot();
-        goto SLEEP;
-    }
-    TMR0_cemaphore=0;
-    Timer[3]=1;
-SLEEP_LOOP:
-    WDTCONbits.SWDTEN=1;
-    Sleep();
-    WDTCONbits.SWDTEN=0;
-    Timer_do();
-//    if(TMR0_cemaphore){
-//        Timer_do();
-//        TMR0_cemaphore--;
-//    }
-    if(!DI_STAT1 && !DI_STAT2){
-        ModQ=2;
-    }
-    switch(ModQ){
-    case 1:
-        DO_RXIND=0;
-        USART_purge("%REBOOT");
-        rn487x_cmd();
-        goto ADVERTISE;
-    case 2:
-        DO_RXIND=0;
-        USART_purge("%REBOOT");
-        rn487x_cmd();
-        goto CONNECT;
-    }
-    goto SLEEP_LOOP;
 ADVERTISE:
     ModQ=1;
     VSO_puts("//Adv mode\n");
+//    rn487x_prog("IA,Z\n");
     rn487x_reset(1);//reset and keep advertise beacon on
-    rn487x_prog("IA,Z\n");
-    USART_purge(Prompt);
-    rn487x_adv();
     DO_RXIND=1;
+//    rn487x_aload();
     rnbuf[0]=0;
-    Timer[1]=30;//adv off timer
     TMR0_cemaphore=0;
 ADVERTISE_LOOP:
+    WDTCONbits.SWDTEN=1;
+    Sleep();
+    WDTCONbits.SWDTEN=0;
+    DO_LED=1;
+    TR_LED=0;
+    xdelay(2);
+    Timer_do();
     if(!DI_STAT1 && !DI_STAT2){
         ModQ=2;
     }
-    else if(TMR0_cemaphore){
-        Timer_do();
-        TMR0_cemaphore--;
-//        lamp_scan(20);
-    }
+//    else if(TMR0_cemaphore){
+//        Timer_do();
+//        TMR0_cemaphore--;
+//    }
+    TR_LED=1;
     switch(ModQ){
-    case 0:
-        DO_RXIND=0;
-        xdelay(100);
-        rn487x_prog("IA,Z\n");//clear adv.payload
-        rn487x_vda();
-        goto SLEEP;
     case 2:
         goto CONNECT;
     }
@@ -213,18 +174,17 @@ ADVERTISE_LOOP:
 CONNECT:
     ModQ=2;
     DO_RXIND=0;
-    Timer[1]=0;//adv off timer
+    Timer[0]=0;
     Timer[2]=60;
+    TMR0_cemaphore=0;
     xdelay(10);
-    USART_puts("IA,Z\n");//clear adv.payload
     VSO_puts("//Connect mode\n");
 CONNECT_LOOP:
     k=USART_gets(rnbuf,'%');
     if(DI_STAT1 || DI_STAT2){//Disconnected
-        rn487x_vda();
-        VSO_puts("//Disconnected/");VSO_cr();
+        VSO_puts("//Disconnected/");VSO_putd(DI_STAT1);VSO_puts(",");VSO_putd(DI_STAT2);VSO_cr();
         Timer[0]=Timer[2]=0;
-        ModQ=0;
+        ModQ=1;
     }
     else if(k>0){
         if(!strncmp(rnbuf,"WV",2)){
@@ -238,6 +198,7 @@ CONNECT_LOOP:
         rnbuf[0]=0;
     }
     else if(k==0){ //End with CR
+//        VSO_puts("gets=");VSO_puts(rnbuf);VSO_cr();
         rnbuf[0]=0;
     }
     else if(TMR0_cemaphore){
@@ -245,30 +206,28 @@ CONNECT_LOOP:
         TMR0_cemaphore--;
     }
     switch(ModQ){
-    case 0:
     case 1:
-        goto SLEEP;
+        goto ADVERTISE;
     case 99:
         rn487x_reboot();
-        goto SLEEP;
+        goto ADVERTISE;
     }
     goto CONNECT_LOOP;
 }
 void Timer_do(){
     int cflag,otim,ctim;
-    VSO_puts("//Timer Do\n");
 T0UP:
     if(Timer[0]==0) goto T1UP; else if(--Timer[0]>0) goto T1UP;
     if(ModQ==2) ModQ=99; //reset
 T1UP://adv off timer
     if(Timer[1]==0) goto T2UP; else if(--Timer[1]>0) goto T2UP;
-    if(ModQ==1) ModQ=0;//sleep queue
 T2UP://disconnect timer
     if(Timer[2]==0) goto T3UP; else if(--Timer[2]>0) goto T3UP;
     if(ModQ==2){
         rn487x_prog("K,1\n");
         Timer[0]=60;//reset timer
         VSO_puts("//Connection Timeout\n");
+        ModQ=1;
     }
 T3UP://cover scan
     if(Timer[3]==0) goto T4UP; else if(--Timer[3]>0) goto T4UP;
@@ -282,21 +241,26 @@ T5UP:
     return;
 }
 void WV_do(char *rs){
-    int a,b,c,d;
+    int a,b,i;
     char s[15];
-    USART_flagSHW=0;
     int h=XSART_parse(rs,s);//chara handle
-    sprintf(rnbuf,"SHW,%04X,",CH_STAT);
+    DO_RXIND=0;
+    xdelay(5);
+    USART_cr();
+    USART_purge(Prompt);//flush cmd buffer
     switch(h){
-    case CH_STAT:
-        switch(*s){
-        case 'U':
-            USART_putSHW(CH_STAT);XSART_putlu(0);USART_cr();
-            break;
-        }
-        break;
     case CH_CMD:
         switch(*s){
+            case 'L':
+            VSO_puts("cmdL");VSO_cr();
+            __verbose=0;
+            for(i=0;i<10;i++){
+                USART_puts("SHW,0075,");XSART_putd(i);XSART_putlu(0x12341234);XSART_putlu(0x12341234);USART_cr();
+                USART_purge(Prompt);
+//                xdelay(10);
+            }
+            __verbose=1;
+            break;
         case 'S':
             switch(atoi(s+1)){
             case 10007:
@@ -322,9 +286,6 @@ void WV_do(char *rs){
                 break;
             }
 				break;
-        case 'L':
-            rn487x_prog("B\n");
-            break;
         case 'W':
             h=s[1]-'0';
             USART_putSHW(CH_STAT);

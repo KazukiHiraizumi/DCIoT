@@ -1,0 +1,192 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="description" content="Sample illustrating the use of Web Bluetooh / Get Characteristics.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Web Bluetooth</title>
+<style type="text/css">
+th button{
+	width:100%;
+	height:40px;
+}
+.comment{
+	font-size:8pt;
+}
+</style>
+<script src="jquery.js" type="text/javascript"></script>
+</head>
+
+<body>
+<button id="connect">接続</button>
+<button id="notif">ノーティファイ</button>
+<button id="discon">切断</button>
+<button id="log">ログ</button>
+<button id="clrlog">ログクリア</button>
+
+<h3>Live Output</h3>
+<div id="output"></div>
+
+<script>
+
+const serviceUuid='10014246-f5b0-e881-09ab-42000ba24f83';
+const charResponseUuid='20034246-f5b0-e881-09ab-42000ba24f83';
+const charRequestUuid='20044246-f5b0-e881-09ab-42000ba24f83';
+
+const ab2str = function(buf) {
+  let bufView = new Uint8Array(buf);
+  return String.fromCharCode.apply(null, bufView);
+}
+const str2ab = function(str) {
+  let encodedString = unescape(encodeURIComponent(str));
+  let bytes = new Uint8Array(encodedString.length);
+  for (let i=0;i<encodedString.length;++i){
+    bytes[i]=encodedString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+let BTLE={
+	gatt:null,service:null,cread:null,cwrite:null,output:null,
+	discon:function(){
+		if(this.gatt==null){
+			$('#output').append('No GATT to disconnect');
+		}
+		else{
+			this.gatt.disconnect();
+		}
+	},
+	getS:async function(){
+		try{
+			$('#output').append('Requesting Bluetooth Device...<br>');
+			const device=await navigator.bluetooth.requestDevice({
+//				filters: [{services: [serviceUuid]}
+				filters: [{name: 'DCIoT'}],
+				optionalServices: [serviceUuid]
+			});
+			$('#output').append('Device gotem :'+device+'<br>');
+			this.gatt=device.gatt;
+			const server=await device.gatt.connect();
+			$('#output').append('Server gotem :'+server+'<br>');
+			this.service=await server.getPrimaryService(serviceUuid);
+			$('#output').append('Service gotten '+this.service+'<br>');
+		}
+		catch(error) {
+			$('#output').append('Argh! '+error+'<br>');
+		}
+	},
+	reconS:async function(){
+		try{
+			const server= await this.gatt.connect();
+			$('#output').append('Gatt Recconected<br>');
+			this.service=await server.getPrimaryServices(serviceUuid);
+			$('#output').append('Service gotten '+service+'<br>');
+		}
+		catch(error){
+			$('#output').append('Argh! '+error+'<br>');
+		}
+	},
+	setN:async function(){
+		let nchar=null;
+		$('#output').append('Try notification on');
+		try{
+			const characteristic=await this.service.getCharacteristic(charResponseUuid);
+//			$('#output').append('> Characteristic UUID:' + characteristic.uuid);
+//			$('#output').append('> Notify:' + characteristic.properties.notify);
+			nchar=characteristic;
+			await nchar.startNotifications();
+			nchar.addEventListener('characteristicvaluechanged',notifCB);
+		}
+		catch(error){
+			$('#output').append('Argh! '+error+'<br>');
+			if(nchar!=null){
+				nchar.addEventListener('characteristicvaluechanged',notifCB);
+			}
+		}
+	},
+	read:async function(){
+		$('#output').append('Read char...');
+		try{
+			const characteristic=await this.service.getCharacteristic(charResponseUuid);
+//			$('#output').append('> Characteristic UUID:' + characteristic.uuid);
+//			$('#output').append('> Read:' + characteristic.properties.read);
+			const value=await characteristic.readValue();
+			let a=[];
+			for(let i=0;i<value.byteLength;i++) a.push(value.getUint8(i));
+			let retval=ab2str(a);
+			$('#output').append('readValue>'+retval);
+			return retval;
+		}
+		catch(error){
+			$('#output').append('Argh! '+error+'<br>');
+			return null;
+		}
+	},
+	write:async function(data){
+		$('#output').append('Write char...'+this.service+'<br>');
+		try{
+			const characteristic=await this.service.getCharacteristic(charRequestUuid);
+//			$('#output').append('> Characteristic UUID:' + characteristic.uuid);
+//			$('#output').append('> Write:' + characteristic.properties.write);
+			await characteristic.writeValue(str2ab(data));
+		}
+		catch(error){
+			$('#output').append('Argh! '+error+'<br>');
+		}
+	}
+}
+let outbuf=[];
+let outqueue=0;
+function notifCB(event){
+	if(outqueue>0) clearTimeout(outqueue);
+	let value=event.target.value;
+	let a=[];
+	for(let i=0;i<value.byteLength;i++) a.push(value.getUint8(i));
+	outbuf.push(ab2str(a));
+	outqueue=setTimeout(function(){
+		outbuf.forEach(function(elm){
+			$('#output').append(elm+'<br>');
+		});
+		outqueue=0;
+	},300);
+}
+
+function isWebBluetoothEnabled(){
+	if(navigator.bluetooth){
+		return true;
+	}
+	else{
+		$('#output').append('Web Bluetooth API is not available.\n' +'Please make sure the "Experimental Web Platform features" flag is enabled.');
+		return false;
+	}
+}
+
+
+$(document).ready(function(){
+	if('serviceWorker' in navigator){
+		navigator.serviceWorker.register('service-worker.js');
+	}
+	$('#connect').click(function(event){
+		if(isWebBluetoothEnabled()) {
+			BTLE.getS();
+		}
+	});
+	$('#notif').click(function(event){
+		BTLE.setN();
+	});
+	$('#log').click(function(event){
+		BTLE.write('L');
+	});
+	$('#discon').click(function(event){
+		BTLE.discon();
+	});
+	$('#clrlog').click(function(event){
+		$('#output').empty();
+	});
+});
+</script>
+
+</body>
+</html>
