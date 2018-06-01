@@ -10,14 +10,15 @@
 #include "zcore.h"
 #include "ble.h"
 
+#define DeviceName "Shimano"
 #define Revision  "0.1"
 
 #define IdCommon  "f5b0e88109ab42000ba24f83"
 #define IdServicePri "10014246"
-#define IdCharLogger "20024246"
-#define IdCharResponse "20034246"
-#define IdCharRequest "20044246"
-#define IdServiceSec "10024246"
+#define IdCharADS "20024246"
+#define IdCharDIN "20034246"
+#define IdCharDOUT "20044246"
+#define IdCharWOUT "20054246"
 #define Prompt "CMD>"
 
 //IOs
@@ -83,7 +84,7 @@ int rn487x_reset(int adv){
     if(USART_purge("%REBOOT")==0){
         rn487x_cmd();
         if(!adv) rn487x_aoff();
-        else USART_puts("A,0100\n");
+        else USART_puts("A,0400\n");
         return 0;
     }
     else return -1;
@@ -103,16 +104,16 @@ Reset:
     rn487x_prog("U\n");
     rn487x_prog("NA,Z\n");
     rn487x_prog("NA,01,06\n");//ad type flag
-  //  USART_puts("NA,09,");XSART_puts(deviceID+8);USART_cr();//set LocalName(09) as BF11xxxx
-    USART_puts("NA,09,");XSART_puts("DCIoT");USART_cr();//set LocalName(09) as BF11xxxx
+    USART_puts("NA,09,");XSART_puts(DeviceName);USART_cr();//set LocalName(09) as BF11xxxx
     USART_purge(Prompt);
-    USART_puts("NA,07,");USART_2stup(IdServicePri""IdCommon);USART_cr();//set 128bits UUID(06)
-    USART_purge(Prompt);
+//    USART_puts("NA,07,");USART_2stup(IdServicePri""IdCommon);USART_cr();//set 128bits UUID(06)
+//    USART_purge(Prompt);
     rn487x_prog("PZ\n");
     rn487x_prog("ST,0050,0100,0002,0064\n");//interval,latecy,timeout
-    rn487x_prog("S-,DCIoT\n");
-    rn487x_prog("SN,DCIoT\n");
-    rn487x_prog("SO,1\n"); //enable sleep mode
+    rn487x_prog("S-,"DeviceName"\n");
+    rn487x_prog("SN,"DeviceName"\n");
+    rn487x_prog("SO,0\n"); //sleep mode off
+//    rn487x_prog("SO,1\n"); //enable sleep mode
 //  rn487x_prog("SB,03\n");//default 115200
     rn487x_prog("SW,0B,07\n");//P13 as Status-1
     rn487x_prog("SW,0A,08\n");//P12 as Status-2
@@ -130,9 +131,10 @@ Reset:
     VSO_puts("//deviceID/");VSO_puts(deviceID);VSO_cr();
 //Private service
     rn487x_prog("PS,"IdServicePri""IdCommon"\n");
-    rn487x_prog("PC,"IdCharLogger""IdCommon",1A,10\n");
-    rn487x_prog("PC,"IdCharResponse""IdCommon",1A,10\n");//Read,Write,Notify
-    rn487x_prog("PC,"IdCharRequest""IdCommon",18,10\n");//Write
+    rn487x_prog("PC,"IdCharADS""IdCommon",0A,02\n");
+    rn487x_prog("PC,"IdCharDIN""IdCommon",08,01\n");
+    rn487x_prog("PC,"IdCharDOUT""IdCommon",12,01\n");
+    rn487x_prog("PC,"IdCharWOUT""IdCommon",12,08\n");
     rn487x_prog("LS\n");
     USART_shrink();
     rn487x_prog("V\n");
@@ -242,67 +244,31 @@ T5UP:
 }
 void WV_do(char *rs){
     int a,b,i;
-    char s[15];
-    int h=XSART_parse(rs,s);//chara handle
+    int han,dat;
+    XSART_parse(rs,&han,&dat);//chara handle
     DO_RXIND=0;
     xdelay(5);
+    VSO_puts("//Flushing deblis");
     USART_cr();
     USART_purge(Prompt);//flush cmd buffer
-    switch(h){
-    case CH_CMD:
-        switch(*s){
-            case 'L':
-            VSO_puts("cmdL");VSO_cr();
-            __verbose=0;
-            for(i=0;i<10;i++){
-                USART_puts("SHW,0075,");XSART_putd(i);XSART_putlu(0x12341234);XSART_putlu(0x12341234);USART_cr();
-                USART_purge(Prompt);
-//                xdelay(10);
-            }
-            __verbose=1;
-            break;
-        case 'S':
-            switch(atoi(s+1)){
-            case 10007:
-            case 10009:
-                break;
-            case 10037:
-                __delay_ms(100);
-                USART_putSHW(CH_STAT);
-                XSART_puts("Done");
-                break;
-            case 10038:
-                __delay_ms(100);
-                break;
-            case 101:
-                __delay_ms(100);
-                break;
-            case 10:
-                __delay_ms(100);
-                break;
-            case 121:
-                USART_putSHW(CH_STAT);
-                XSART_putd(10);
-                break;
-            }
-				break;
-        case 'W':
-            h=s[1]-'0';
-            USART_putSHW(CH_STAT);
-            XSART_putd(h);
-            break;
+    switch(han){
+    case CH_ADS:
+        VSO_puts("ADS=");VSO_putd(dat);VSO_cr();
+         __verbose=0;
+        for(i=0;i<10;i++){
+            XSART_putSHW(CH_WOUT);XSART_putInt16(i);XSART_putInt16(10*i);XSART_putInt16(100*i);XSART_putInt16(1000*i);USART_cr();
+            USART_purge(Prompt);
         }
+        __verbose=1;
         break;
-    }
-    if(USART_flagSHW>0){
-        USART_cr();
-        USART_purge(Prompt);
     }
 }
 void WC_do(char *rs){
+    int han,dat;
+    XSART_parse(rs,&han,&dat);//chara handle
+    VSO_puts("WC=");VSO_putx(han);VSO_cr();
 }
 //Comm libs b.w. RN487x
-int XSART_parse(char *src,char *res);
 void USART_2stup(char *s){//reverse put string
     int i=strlen(s)-2;
     char *p=s+i;
@@ -327,35 +293,35 @@ void XSART_puts(char *s){//put string as hex dump
         else USART_putc(h-10+'A');
     }
 }
-void XSART_putd(int d){
-    char s[12];
-    sprintf(s,"%d",d);
-    XSART_puts(s);
-}
-void XSART_putlu(unsigned long d){
-    char s[12];
-    sprintf(s,"%lu",d);
-    XSART_puts(s);
-}
-void XSART_putlX(unsigned long d){
-    char s[10];
-    sprintf(s,"%lX",d);
-    XSART_puts(s);
-}
-void USART_putSHW(int x){
-    char s[10];
-    sprintf(s,"%04X",x);
-    USART_puts("SHW,");
+void XSART_putInt8(int d){
+    char s[3];
+    sprintf(s,"%02x",d);
     USART_puts(s);
-    USART_puts(",");
-    USART_flagSHW++;
 }
-int hex2byte(char *s){
-    int h=s[0]-'0';
-    if(h>9) h=s[0]-'A'+10;
-    int l=s[1]-'0';
-    if(l>9) l=s[1]-'A'+10;
-    return (h<<4)|l;
+void XSART_putInt16(int d){
+    char s[5];
+    sprintf(s,"%04x",d);
+    USART_puts(s);
+}
+void XSART_putSHW(int d){
+    char s[10];
+    sprintf(s,"SHW,%04x,",d);    
+    USART_puts(s);
+}
+unsigned int hex2byte(char *s){
+    unsigned int val=0;
+    for(;;val<<=4){
+        int c=*s;
+        int h=c-'0';
+        if(h>9) h=c-'A'+10;
+        val+=h;
+        s++;
+        c=*s;
+        if(c>='0' && c<='9') continue;
+        if(c>='A' && c<='F') continue;
+        break;
+    }
+    return val;
 }
 int hex2str(char *src,char *dst){
     int n=strlen(src)/2;
@@ -365,11 +331,12 @@ int hex2str(char *src,char *dst){
     *dst=0;
     return n;
 }
-int XSART_parse(unsigned char *src,unsigned char *val){
+int XSART_parse(unsigned char *src,unsigned int *handle,unsigned int *val){
     char *d1=strchr(src,',');
     if(d1==NULL) return -1;
     char *d2=strchr(d1+1,',');
     if(d2==NULL) return -1;
-    hex2str(d2+1,val);
-    return hex2byte(d1+1)*256+hex2byte(d1+3);
+    *val=hex2byte(d2+1);
+    *handle=hex2byte(d1+1);
+    return 0;
 }

@@ -1,7 +1,7 @@
 #ifndef BLECMD_H
 #define	BLECMD_H
 
-extern int hex2byte(char *);//convert 2 character hex string to int
+extern unsigned int hex2byte(char *);
 extern int hex2str(char *src,char *dest); //convert hex string to ascii string
 extern void str2hex(char *src,char *dest);
 extern void d2hex(int ,char *dest);
@@ -9,20 +9,19 @@ extern void lu2hex(unsigned long ,char *dest);
 extern void lx2hex(unsigned long ,char *dest);
 
 //Comm Libs
-extern int XSART_parse(char *src,char *res);
-extern void USART_2stup(char *s);
+extern int XSART_parse(char *src,unsigned int *,unsigned int *);
+extern void USART_2stup(char *);
 extern void USART_cr();
-extern void XSART_puts(char *s);
-extern void XSART_putd(int d);
-extern void XSART_putlu(unsigned long d);
-extern void XSART_putlX(unsigned long d);
-extern int USART_flagSHW;
-extern void USART_putSHW(int x);
+extern void XSART_putSHW(int);
+extern void XSART_puts(char *);
+extern void XSART_putInt8(int);
+extern void XSART_putInt16(int);
 
 //Characteristic Handles
-#define CH_LOG 0x0072
-#define CH_STAT 0x0075
-#define CH_CMD 0x0078
+#define CH_ADS 0x0072
+#define CH_DIN 0x0074
+#define CH_DOUT 0x0076
+#define CH_WOUT 0x0079
 //IOs
 //#define DI_RESET    PORTCbits.RC2
 #define DO_RESET    LATCbits.LC2

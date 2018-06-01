@@ -32,8 +32,10 @@ th button{
 <script>
 
 const serviceUuid='10014246-f5b0-e881-09ab-42000ba24f83';
-const charResponseUuid='20034246-f5b0-e881-09ab-42000ba24f83';
-const charRequestUuid='20044246-f5b0-e881-09ab-42000ba24f83';
+const charAdsUuid='20024246-f5b0-e881-09ab-42000ba24f83';
+const charDinUuid='20034246-f5b0-e881-09ab-42000ba24f83';
+const charDoutUuid='20044246-f5b0-e881-09ab-42000ba24f83';
+const charWoutUuid='20054246-f5b0-e881-09ab-42000ba24f83';
 
 const ab2str = function(buf) {
   let bufView = new Uint8Array(buf);
@@ -63,15 +65,18 @@ let BTLE={
 			$('#output').append('Requesting Bluetooth Device...<br>');
 			const device=await navigator.bluetooth.requestDevice({
 //				filters: [{services: [serviceUuid]}
-				filters: [{name: 'DCIoT'}],
-				optionalServices: [serviceUuid]
+				filters: [{name: 'Shimano'}]
+//				optionalServices: [serviceUuid]
 			});
-			$('#output').append('Device gotem :'+device+'<br>');
+			$('#output').append('Device: '+device+'<br>');
+			device.addEventListener('gattserverdisconnected',function(event){
+				$('#output').append('Device disconnected<br>');
+			});
 			this.gatt=device.gatt;
 			const server=await device.gatt.connect();
-			$('#output').append('Server gotem :'+server+'<br>');
+			$('#output').append('Server: '+server+'<br>');
 			this.service=await server.getPrimaryService(serviceUuid);
-			$('#output').append('Service gotten '+this.service+'<br>');
+			$('#output').append('Service: '+this.service+'<br>');
 		}
 		catch(error) {
 			$('#output').append('Argh! '+error+'<br>');
@@ -88,69 +93,93 @@ let BTLE={
 			$('#output').append('Argh! '+error+'<br>');
 		}
 	},
-	setN:async function(){
+	bufDout:null,
+	queueDout:0,
+	setDout:async function(){
+		let nchar=null;
+		$('#output').append('Try notification on');
+		this.bufDout=[];
+		try{
+			const characteristic=await this.service.getCharacteristic(charDoutUuid);
+			nchar=characteristic;
+			await nchar.startNotifications();
+			nchar.addEventListener('characteristicvaluechanged',function(event){
+				if(this.queueDout>0) clearTimeout(this.queueDout);
+				this.bufDout.push(event.target.value.getUint8(0));
+				this.queueDout=setTimeout(function(){
+					$('#output').append('Dout callback<br>');
+					this.bufDout.forEach(function(elm){
+						$('#output').append(elm+'<br>');
+					});
+					this.queueDout=0;
+				},300);
+			});
+		}
+		catch(error){
+			$('#output').append('Argh! '+error+'<br>');
+//			if(nchar!=null){
+//				nchar.addEventListener('characteristicvaluechanged',notiDout);
+//			}
+		}
+	},
+	bufWout:[],
+	queueWout:0,
+	setWout:async function(){
+		let scope=this;
 		let nchar=null;
 		$('#output').append('Try notification on');
 		try{
-			const characteristic=await this.service.getCharacteristic(charResponseUuid);
-//			$('#output').append('> Characteristic UUID:' + characteristic.uuid);
-//			$('#output').append('> Notify:' + characteristic.properties.notify);
+			const characteristic=await this.service.getCharacteristic(charWoutUuid);
 			nchar=characteristic;
 			await nchar.startNotifications();
-			nchar.addEventListener('characteristicvaluechanged',notifCB);
+			nchar.addEventListener('characteristicvaluechanged',function(event){
+console.log('Wout CB');
+				if(scope.queueWout>0) clearTimeout(scope.queueWout);
+				let value=event.target.value;
+				for(let i=0;i<value.byteLength;i+=2){
+					scope.bufWout.push(value.getUint16(i));
+				}
+				scope.queueWout=setTimeout(function(){
+					$('#output').append('Wout callback<br>');
+					scope.bufWout.forEach(function(elm){
+						$('#output').append(elm+'<br>');
+					});
+					scope.queueWout=0;
+					scope.bufWout=[];
+				},300);
+			});
 		}
 		catch(error){
 			$('#output').append('Argh! '+error+'<br>');
-			if(nchar!=null){
-				nchar.addEventListener('characteristicvaluechanged',notifCB);
-			}
+//			if(nchar!=null){
+//				nchar.addEventListener('characteristicvaluechanged',notifCB);
+//			}
 		}
 	},
-	read:async function(){
-		$('#output').append('Read char...');
+	writeAds:async function(val){
+		$('#output').append('writeA char...'+this.service+'<br>');
 		try{
-			const characteristic=await this.service.getCharacteristic(charResponseUuid);
-//			$('#output').append('> Characteristic UUID:' + characteristic.uuid);
-//			$('#output').append('> Read:' + characteristic.properties.read);
-			const value=await characteristic.readValue();
-			let a=[];
-			for(let i=0;i<value.byteLength;i++) a.push(value.getUint8(i));
-			let retval=ab2str(a);
-			$('#output').append('readValue>'+retval);
-			return retval;
+			const characteristic=await this.service.getCharacteristic(charAdsUuid);
+			let data=new Uint16Array(1);
+			data[0]=val;
+			await characteristic.writeValue(data);
 		}
 		catch(error){
 			$('#output').append('Argh! '+error+'<br>');
-			return null;
 		}
 	},
-	write:async function(data){
-		$('#output').append('Write char...'+this.service+'<br>');
+	writeDin:async function(val){
+		$('#output').append('writeD char...'+this.service+'<br>');
 		try{
-			const characteristic=await this.service.getCharacteristic(charRequestUuid);
-//			$('#output').append('> Characteristic UUID:' + characteristic.uuid);
-//			$('#output').append('> Write:' + characteristic.properties.write);
-			await characteristic.writeValue(str2ab(data));
+			const characteristic=await this.service.getCharacteristic(charDinUuid);
+			const data=new Uint8Array(1);
+			data[0]=val;
+			await characteristic.writeValue(data);
 		}
 		catch(error){
 			$('#output').append('Argh! '+error+'<br>');
 		}
 	}
-}
-let outbuf=[];
-let outqueue=0;
-function notifCB(event){
-	if(outqueue>0) clearTimeout(outqueue);
-	let value=event.target.value;
-	let a=[];
-	for(let i=0;i<value.byteLength;i++) a.push(value.getUint8(i));
-	outbuf.push(ab2str(a));
-	outqueue=setTimeout(function(){
-		outbuf.forEach(function(elm){
-			$('#output').append(elm+'<br>');
-		});
-		outqueue=0;
-	},300);
 }
 
 function isWebBluetoothEnabled(){
@@ -174,10 +203,10 @@ $(document).ready(function(){
 		}
 	});
 	$('#notif').click(function(event){
-		BTLE.setN();
+		BTLE.setWout();
 	});
 	$('#log').click(function(event){
-		BTLE.write('L');
+		BTLE.writeAds(0x1234);
 	});
 	$('#discon').click(function(event){
 		BTLE.discon();
