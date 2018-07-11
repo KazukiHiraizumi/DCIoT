@@ -46,6 +46,7 @@ extern "C" {
 //Functions
 extern unsigned char __verbose;
 extern unsigned char USART_flag;
+extern unsigned char work_buffer[];
 extern void USART_init(unsigned long bps);
 extern void USART_shrink();//Shrink work area
 extern void USART_clr();
@@ -63,8 +64,8 @@ extern unsigned long TMR0_period;
 extern unsigned char TMR0_cemaphore;
 extern unsigned char TMR0_count;
 extern void TMR1_init();
-extern void TMR1_set(unsigned int,void (*)());
-
+extern void TMR1_set(unsigned int);
+extern unsigned char TMR1_up;
 extern void VSO_init();
 extern void VSO_putc(unsigned char);
 extern void VSO_puts(unsigned char *);
@@ -82,6 +83,11 @@ extern int AD_scan(int adds);
 
 extern int E2ROM_read(int adds);
 extern void E2ROM_write(int adds,int val);
+
+extern void USART2_init(unsigned long bps);
+extern int USART2_gets(unsigned char *dat);//returns cmd
+extern void USART2_cmd(int cmd,int dat);
+extern void USART2_putc(unsigned char c);
 
 #ifdef	__cplusplus
 }

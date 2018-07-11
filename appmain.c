@@ -27,16 +27,24 @@
 #define DO_LED      LATCbits.LC1
 #define TR_LED      TRISCbits.RC1
 
-static unsigned char rnbuf[50];//comm buffer to/from RN4xxx
+static unsigned char r2buf[20];//comm buffer from DC
+static unsigned char r1buf[50];//comm buffer to/from RN4xxx
 static unsigned char deviceID[15];
 static unsigned char ModQ; //0:discon,1:adv,2:connect
 //diag
 static unsigned short Timer[]={0,0,0,0,0};//wallet scan,adv off,discon,battery
+//Castum
+unsigned short cadds;
+unsigned short CT_rev=0;
+unsigned short CT_pwm;
+unsigned long CT_dt,CT_time;
+signed long CT_tens;
+static char *CT_buf=work_buffer+192;
+
 //handler
 void Timer_do();//Do every 1 sec
 void WV_do(char *);//Do on receiving "%WV"
 void WC_do(char *);//Do on receiving "%WC"
-int USART_flagSHW;
 void xdelay(int ms){
     int tc=OSC_Clock/_XTAL_FREQ;
     int dn=ms*tc;
@@ -54,8 +62,11 @@ void rn487x_aload(){
     USART_puts("IA,07,");USART_2stup(IdServicePri""IdCommon);USART_cr();//set 128bits UUID(06)
     USART_purge(Prompt);
 }
+void rn487x_aon(){//restart advertize
+    rn487x_prog("A,0400,\n");
+}
 void rn487x_aoff(){//stop advertize
-    USART_puts("A,0100,0001\n");
+    USART_puts("A,0400,0001\n");
     USART_purge("%ADV_TIMEOUT");
 }
 int rn487x_cmd(){
@@ -84,7 +95,7 @@ int rn487x_reset(int adv){
     if(USART_purge("%REBOOT")==0){
         rn487x_cmd();
         if(!adv) rn487x_aoff();
-        else USART_puts("A,0400\n");
+        else  rn487x_aon();
         return 0;
     }
     else return -1;
@@ -133,16 +144,18 @@ Reset:
     rn487x_prog("PS,"IdServicePri""IdCommon"\n");
     rn487x_prog("PC,"IdCharADS""IdCommon",0A,02\n");
     rn487x_prog("PC,"IdCharDIN""IdCommon",08,01\n");
-    rn487x_prog("PC,"IdCharDOUT""IdCommon",12,01\n");
-    rn487x_prog("PC,"IdCharWOUT""IdCommon",12,08\n");
+    rn487x_prog("PC,"IdCharDOUT""IdCommon",12,02\n");
+    rn487x_prog("PC,"IdCharWOUT""IdCommon",12,0A\n");
     rn487x_prog("LS\n");
     USART_shrink();
     rn487x_prog("V\n");
 //App inits
+    USART2_init(230400L);
+    TMR1_init();//32kHz
 }
 
 void loop(){
-    int i,j,k;
+    int i,j,k,h,r2len;
 ADVERTISE:
     ModQ=1;
     VSO_puts("//Adv mode\n");
@@ -150,60 +163,107 @@ ADVERTISE:
     rn487x_reset(1);//reset and keep advertise beacon on
     DO_RXIND=1;
 //    rn487x_aload();
-    rnbuf[0]=0;
+    r1buf[0]=r2buf[0]=0;
     TMR0_cemaphore=0;
+    Timer[1]=1; //LED blink
 ADVERTISE_LOOP:
-    WDTCONbits.SWDTEN=1;
-    Sleep();
-    WDTCONbits.SWDTEN=0;
-    DO_LED=1;
-    TR_LED=0;
-    xdelay(2);
-    Timer_do();
+//    WDTCONbits.SWDTEN=1;
+//    Sleep();
+//    WDTCONbits.SWDTEN=0;
+    if(TMR0_cemaphore){
+        Timer_do();
+        TMR0_cemaphore--;
+    }
     if(!DI_STAT1 && !DI_STAT2){
         ModQ=2;
     }
-//    else if(TMR0_cemaphore){
-//        Timer_do();
-//        TMR0_cemaphore--;
-//    }
-    TR_LED=1;
+
+    if((r2len=USART2_gets(r2buf))>0){
+        int cmd=r2buf[6];
+//        switch(cmd){
+//        case 0x22:
+            ModQ=12;
+//        }
+    }
     switch(ModQ){
     case 2:
         goto CONNECT;
+    case 12:
+        goto WAVREC;
     }
     goto ADVERTISE_LOOP;
+WAVREC:
+    ModQ=12;
+    VSO_puts("//Rec mode\n");
+//    rn487x_aoff();
+    CT_rev=CT_pwm=CT_dt=CT_tens=0;
+    *(unsigned short *)CT_buf=0;
+WAVREC_LOOP:
+    CT_time=((unsigned long)r2buf[2]<<16)+((unsigned short)r2buf[3]<<8)+r2buf[4];
+    CT_pwm+=r2buf[10];
+    CT_dt+=((unsigned short)r2buf[7]<<8)+r2buf[8];
+    CT_tens+=((short)(signed char)r2buf[11]<<8)+r2buf[12];
+    if((CT_rev&0x0F)==0x0F){
+        int tmsec=CT_time>>8;
+        char *buf=CT_buf+(CT_rev>>4)*10;
+        *(unsigned short *)buf=CT_rev;
+        *(unsigned short *)(buf+2)=tmsec;
+        *(unsigned short *)(buf+4)=CT_dt>>4;
+        *(unsigned short *)(buf+6)=CT_pwm>>4;
+        *(signed short *)(buf+8)=CT_tens>>4;
+        *(unsigned short *)(buf+10)=0;
+        CT_pwm=CT_dt=CT_tens=0;
+    }
+    CT_rev++;
+    TMR1_set(200);
+    while(!TMR1_up){
+        if((r2len=USART2_gets(r2buf))>0){
+            if(r2buf[6]==0x22) goto WAVREC_LOOP;
+            else TMR1_set(200);
+        }
+    }
+    VSO_puts("CT_done:");VSO_putd(CT_rev);VSO_cr();
+    goto ADVERTISE;
 CONNECT:
     ModQ=2;
     DO_RXIND=0;
     Timer[0]=0;
-    Timer[2]=60;
+    Timer[2]=10;
     TMR0_cemaphore=0;
     xdelay(10);
     VSO_puts("//Connect mode\n");
 CONNECT_LOOP:
-    k=USART_gets(rnbuf,'%');
+    k=USART_gets(r1buf,'%');
     if(DI_STAT1 || DI_STAT2){//Disconnected
         VSO_puts("//Disconnected/");VSO_putd(DI_STAT1);VSO_puts(",");VSO_putd(DI_STAT2);VSO_cr();
         Timer[0]=Timer[2]=0;
         ModQ=1;
     }
     else if(k>0){
-        if(!strncmp(rnbuf,"WV",2)){
+        if(!strncmp(r1buf,"WV",2)){
             Timer[2]=30;//disconnect time
-            WV_do(rnbuf);
+            WV_do(r1buf);
         }
-        else if(!strncmp(rnbuf,"WC",2)){
+        else if(!strncmp(r1buf,"WC",2)){
             Timer[2]=30;//disconnect timer
-            WC_do(rnbuf);
+            WC_do(r1buf);
         }
-        rnbuf[0]=0;
+        r1buf[0]=0;
     }
     else if(k==0){ //End with CR
-//        VSO_puts("gets=");VSO_puts(rnbuf);VSO_cr();
-        rnbuf[0]=0;
+//        VSO_puts("gets=");VSO_puts(r1buf);VSO_cr();
+        r1buf[0]=0;
     }
-    else if(TMR0_cemaphore){
+    if(USART2_gets(r2buf)>0){
+        int cmd=r2buf[6];
+        switch(cmd){
+        case 0x2:
+            ModQ=21;
+        case 0x22:
+            ModQ=22;
+        }
+    }
+    if(TMR0_cemaphore){
         Timer_do();
         TMR0_cemaphore--;
     }
@@ -221,8 +281,15 @@ void Timer_do(){
 T0UP:
     if(Timer[0]==0) goto T1UP; else if(--Timer[0]>0) goto T1UP;
     if(ModQ==2) ModQ=99; //reset
-T1UP://adv off timer
+T1UP://LED blink
     if(Timer[1]==0) goto T2UP; else if(--Timer[1]>0) goto T2UP;
+    if(ModQ==1){
+        DO_LED=1;
+        TR_LED=0;
+        xdelay(2);
+        TR_LED=1;
+        Timer[1]=1;
+    }
 T2UP://disconnect timer
     if(Timer[2]==0) goto T3UP; else if(--Timer[2]>0) goto T3UP;
     if(ModQ==2){
@@ -233,18 +300,21 @@ T2UP://disconnect timer
     }
 T3UP://cover scan
     if(Timer[3]==0) goto T4UP; else if(--Timer[3]>0) goto T4UP;
-    if(ModQ==0){
-        if(DI_LEADSW) ModQ=1;
-    }
-    Timer[3]=1;
+/*    if(ModQ==1){
+        VSO_puts("Loopback");VSO_cr();
+        char *s="0123456789";
+        for(;*s;s++) USART2_putc(*s);
+        Timer[3]=3;
+    }*/
 T4UP://auto advertise timer
     if(Timer[4]==0) goto T5UP; else if(--Timer[4]>0) goto T5UP;
 T5UP:
     return;
 }
+void mkwav();
 void WV_do(char *rs){
     int a,b,i;
-    int han,dat;
+    unsigned int han,dat;
     XSART_parse(rs,&han,&dat);//chara handle
     DO_RXIND=0;
     xdelay(5);
@@ -253,13 +323,31 @@ void WV_do(char *rs){
     USART_purge(Prompt);//flush cmd buffer
     switch(han){
     case CH_ADS:
-        VSO_puts("ADS=");VSO_putd(dat);VSO_cr();
-         __verbose=0;
-        for(i=0;i<10;i++){
-            XSART_putSHW(CH_WOUT);XSART_putInt16(i);XSART_putInt16(10*i);XSART_putInt16(100*i);XSART_putInt16(1000*i);USART_cr();
-            USART_purge(Prompt);
+        VSO_puts("ADS=");VSO_putx(dat);VSO_cr();
+        if(dat==0xFA01){
+            USART2_cmd(1,0);
         }
-        __verbose=1;
+        else if(dat==0xFC01){
+            char *buf=CT_buf;
+//            mkwav();
+             __verbose=0;
+            for(;CT_rev>0;buf+=10){
+                unsigned short n=*(unsigned short *)buf;
+                unsigned short t=*(unsigned short *)(buf+2);
+                unsigned short dt=*(unsigned short *)(buf+4);
+                unsigned short p=*(unsigned short *)(buf+6);
+                signed short f=*(signed short *)(buf+8);
+                if(n==0) break;
+                XSART_putSHW(CH_WOUT);XSART_putInt16(n);XSART_putInt16(t);XSART_putInt16(dt);XSART_putInt16(p);XSART_putInt16(f);USART_cr();
+                USART_purge(Prompt);
+                VSO_puts("[");VSO_putd(n);VSO_puts(",");VSO_putd(dt);VSO_puts("]\n");
+                Timer[2]=10;//extend connection
+            }
+            __verbose=1;
+        }
+        else if(dat<256){
+            cadds=dat;
+        }
         break;
     }
 }
@@ -268,6 +356,7 @@ void WC_do(char *rs){
     XSART_parse(rs,&han,&dat);//chara handle
     VSO_puts("WC=");VSO_putx(han);VSO_cr();
 }
+
 //Comm libs b.w. RN487x
 void USART_2stup(char *s){//reverse put string
     int i=strlen(s)-2;
@@ -339,4 +428,30 @@ int XSART_parse(unsigned char *src,unsigned int *handle,unsigned int *val){
     *val=hex2byte(d2+1);
     *handle=hex2byte(d1+1);
     return 0;
+}
+
+
+////For testing
+void mkwav(){
+    CT_dt=3000L*32;
+    CT_pwm=100*32;
+    CT_tens=1000L*32;
+    CT_time=CT_dt;
+    CT_rev=31;
+LOOP:
+    if((CT_rev&0x1F)==0x1F){
+        int tmsec=CT_time>>10;
+        char *buf=work_buffer+128+(CT_rev>>5)*10;
+        *(unsigned short *)buf=CT_rev;
+        *(unsigned short *)(buf+2)=tmsec;
+        *(unsigned short *)(buf+4)=CT_dt>>5;
+        *(unsigned short *)(buf+6)=CT_pwm>>5;
+        *(signed short *)(buf+8)=CT_tens>>5;
+    }
+    CT_time+=CT_dt;
+    CT_pwm=((long)CT_pwm*225)>>8;
+    CT_dt=(CT_dt*275)>>8;
+    CT_tens=CT_tens-3000;
+    CT_rev+=32;
+    if(CT_rev<500) goto LOOP;
 }

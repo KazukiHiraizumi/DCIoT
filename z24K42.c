@@ -208,17 +208,20 @@ void TMR0_clr(){
     TMR0L=0;
     TMR0_cemaphore=0;
 }
-void (*TMR1_callback)();
+unsigned char TMR1_up,TMR1_tick;
 void TMR1_isr(){
     if(PIR1bits.TMR1IF==0) return;
-    T1CONbits.TMR1ON=0;
-    (*TMR1_callback)();
-    PIR1bits.TMR1IF=0;
+    if(--TMR1_tick==0){
+        T1CONbits.TMR1ON=0;
+        TMR1_up=1;
+    }
+    else PIR1bits.TMR1IF=0;
 }
-void TMR1_set(unsigned msec,void (*f)()){
-    TMR1_callback=f;
-    TMR1H=msec>>1;
-    TMR1L=msec<<7;
+void TMR1_set(unsigned int c){
+    TMR1_tick=c/10;
+    TMR1_up=0;
+    TMR1H=0xFF;
+    TMR1L=0xFF;
     PIE1bits.TMR1IE=1;
     INTCONbits.PEIE=1;
     INTCONbits.GIE=1;
@@ -226,10 +229,9 @@ void TMR1_set(unsigned msec,void (*f)()){
     T1CONbits.TMR1ON=1;
 }
 void TMR1_init(){
-    TMR1_callback=NULL;
-    T1CONbits.T1CKPS=3;
     T1CONbits.T1OSCEN=0;
     T1CONbits.TMR1CS=0;
+    T1CONbits.T1CKPS=0;
 }
 //Virtual Serial Out service only 2400 bps
 #define VSOBPS  9600
@@ -338,8 +340,8 @@ void E2ROM_write(int a,int d){
 
 //USART-2 service
 #ifdef TXREG2
-static unsigned char *USART2_rbuf=work_buffer+100;
-static int USART2_rbufw=0,USART2_rbufr=0,USART2_rbufsz=64;
+static unsigned char *USART2_rbuf=work_buffer+64;
+static int USART2_rbufw=0,USART2_rbufr=0,USART2_rbufsz=128;
 void USART2_isr(){
     char c;
     if(PIR3bits.RC2IF==0) return;
@@ -359,37 +361,39 @@ void USART2_putc(unsigned char c){
     while(!TXSTA2bits.TRMT);
     TXREG2 = c;
 }
-void USART2_puts(unsigned char *s){
-    for(;*s;s++) USART2_putc(*s);
+void USART2_cmd(int cmd,int dat){
 }
 int USART2_getc(){
     if(USART2_rbufw!=USART2_rbufr){
-        int a=USART_rbuf[USART2_rbufr++];
+        int a=USART2_rbuf[USART2_rbufr++];
         if(USART2_rbufr>=USART2_rbufsz) USART2_rbufr=0;
         return a;
     }
     else return -1;
 }
-int USART2_gets(unsigned char *s,unsigned char eos){
+static int USART2_wp=0;
+static unsigned char USART2_sum=0;
+int USART2_gets(unsigned char *s){
     int a=USART2_getc();
-    int n=strlen(s);
-    if(a<0){
-        return -1;
-    }
-    else{
-        if(a<0x10){
-            if(n>0){
-                return 0;
+    if(a>=0){
+        if(USART2_wp==0){
+            if(a==2){
+                USART2_sum=a;
+                s[USART2_wp++]=a;
             }
-            else return -1;
         }
-        s[n]=a;
-        s[n+1]=0;
-        if(eos){
-            if(a==eos) return 1;
+        else{
+            s[USART2_wp++]=a;
+            if(USART2_wp>5 && USART2_wp>=s[5]+7){
+                int wn=USART2_wp;
+                USART2_wp=0;
+                s[wn]=USART2_sum;
+                return wn+1;
+            }
+            USART2_sum+=a;
         }
-        return -1;
     }
+    return -1;
 }
 void USART2_init(unsigned long bps){
     unsigned short brg=OSC_Clock/4/bps-1;

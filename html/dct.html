@@ -8,29 +8,178 @@
 
 <title>Web Bluetooth</title>
 <style type="text/css">
-th button{
+#ind button{
 	width:100%;
 	height:40px;
+  font-size:0.8em;
+}
+#ind th{
+	height:40px;
+  font-size:0.8em;
+}
+#control button{
+	width:100%;
+	height:40px;
+  font-size:1.5em;
+}
+#control td{
+	width:40px;
+}
+#output{
+  font-size:0.8em;
 }
 .comment{
 	font-size:8pt;
 }
 </style>
-<script src="jquery.js" type="text/javascript"></script>
+<script src="//code.jquery.com/jquery-3.3.1.min.js" type="text/javascript"></script>
 </head>
 
 <body>
-<button id="connect">接続</button>
-<button id="notif">ノーティファイ</button>
 <button id="discon">切断</button>
-<button id="log">ログ</button>
-<button id="clrlog">ログクリア</button>
+<button id="clrlog">クリア</button><br clear="all">
+<div>
+<div style="float:left;">
+<canvas id="plot" style="width:500px;height:400px;background-color:ivory" ></canvas>
+</div>
+<div>
+<table id="control">
+<tr><td colspan="3"><hr>
+<tr><td><td rowspan="2"><button id="up">↑</button>
+<tr><td rowspan="2"><button id="left">←</button><td rowspan="2"><button id="right">→</button>
+<tr><td rowspan="2"><button id="down">↓</button>
+<tr><td><td>
+<tr><td colspan="3"><hr>
+<tr><td colspan="3"><button>送信</button>
+</table>
+</div>
+</div>
+<br clear="all">
+<table id="ind" border>
+<tr><td><button id="connect">接続</button><th id="ind_dev">Device<th id="ind_srv">Server<th id="ind_svc">Service<th id="ind_notd">Notify<th id="ind_notw">Notify
+</table>
 
-<h3>Live Output</h3>
+<h3>Debugging</h3>
 <div id="output"></div>
 
 <script>
+function isWebBluetoothEnabled(){
+	if(navigator.bluetooth){
+		return true;
+	}
+	else{
+		$('#output').append('Web Bluetooth API is not available.\n' +'Please make sure the "Experimental Web Platform features" flag is enabled.');
+		return false;
+	}
+}
 
+function resetInd(){
+  $('#ind th').css({'background':'grey'});
+}
+
+let canvas,context;
+let BrkX=[0,10,20,50,100,200,500];
+let BrkY=[0,100,100,50,40,30,25];
+let BrkC=-1;
+let WavX=[];
+let WavY1=[];
+let WavY2=[];
+let WavY3=[];
+let RangeX=[0,500];
+let RangeY1=[0,6*1000];
+let RangeY2=[-3*100,3*100];
+let RangeY3=[-3*1000,3*1000];
+let RangeB=[0,6*50];
+
+function drawAll(){
+  gridPlot(10,6);
+	graphPlot(WavX,WavY1,RangeX,RangeY1,'green');
+  graphPlot(WavX,WavY2,RangeX,RangeY2,'red');
+  graphPlot(WavX,WavY3,RangeX,RangeY3,'blue');
+  graphPlot(BrkX,BrkY,RangeX,RangeB,'blue');
+  circlePlot(BrkX[BrkC],BrkY[BrkC],RangeX,RangeB,'blue');
+ textPlot(BrkX[BrkC],BrkY[BrkC],RangeX,RangeB,BrkX[BrkC]+','+BrkY[BrkC],'blue');
+}
+
+$(document).ready(function(){
+	if('serviceWorker' in navigator){
+		navigator.serviceWorker.register('service-worker.js');
+	}
+  resetInd();
+  canvas=$("#plot").get(0);
+  context=canvas.getContext('2d');
+  canvas.width=$('#plot').width();
+  canvas.height=$('#plot').height();
+  drawAll();
+
+	$('#connect').click(function(event){
+		if(isWebBluetoothEnabled()) {
+			BTLE.getS();
+		}
+	});
+	$('#discon').click(function(event){
+		BTLE.discon();
+	});
+	$('#clrlog').click(function(event){
+		$('#output').empty();
+	});
+	$('#plot').click(function(event){
+    let x=event.pageX-$(event.target).offset().left;
+    let y=event.pageY-$(event.target).offset().top;
+    let dist=canvas.width*canvas.width+canvas.height*canvas.height;
+    for(let i=0;i<BrkX.length;i++){
+      let p=coordPlot(BrkX[i],BrkY[i],RangeX,RangeB);
+      let d=(x-p.x)*(x-p.x)+(y-p.y)*(y-p.y);
+      if(dist>d){
+        BrkC=i;
+        dist=d;
+      }
+    }
+    drawAll();
+	});
+  $('#up').click(function(event){
+    if(BrkC>=0){
+      let y=Math.floor(BrkY[BrkC]*1.05);
+      if(BrkY[BrkC]<y) BrkY[BrkC]=y;
+      else BrkY[BrkC]++;
+      drawAll();
+    }
+  });
+  $('#down').click(function(event){
+    if(BrkC>=0){
+      let y=Math.floor(BrkY[BrkC]*0.95);
+      if(BrkY[BrkC]>y) BrkY[BrkC]=y;
+      else BrkY[BrkC]--;
+      drawAll();
+    }
+  });
+  $('#left').click(function(event){
+    if(BrkC>0){
+      let x1=BrkX[BrkC],x2;
+      let v=Math.floor((256/3*Math.log10(x1)+1));
+      for(;;v--){
+        x2=Math.floor(Math.pow(10,3*(v+1)/256));
+        if(x2<x1) break;
+      }
+      BrkX[BrkC]=x2;
+      drawAll();
+    }
+  });
+  $('#right').click(function(event){
+    if(BrkC>0){
+      let x1=BrkX[BrkC],x2;
+      let v=Math.floor((256/3*Math.log10(x1)+1));
+      for(;;v++){
+        x2=Math.floor(Math.pow(10,3*(v+1)/256));
+        if(x2>x1) break;
+      }
+      BrkX[BrkC]=x2;
+      drawAll();
+    }
+  });
+});
+
+//BLE///
 const serviceUuid='10014246-f5b0-e881-09ab-42000ba24f83';
 const charAdsUuid='20024246-f5b0-e881-09ab-42000ba24f83';
 const charDinUuid='20034246-f5b0-e881-09ab-42000ba24f83';
@@ -51,72 +200,87 @@ const str2ab = function(str) {
 }
 
 let BTLE={
-	gatt:null,service:null,cread:null,cwrite:null,output:null,
+	device:null,
 	discon:function(){
-		if(this.gatt==null){
-			$('#output').append('No GATT to disconnect');
+		if(this.device==null){
+			console.log('No GATT to disconnect');
 		}
 		else{
-			this.gatt.disconnect();
+			this.device.gatt.disconnect();
 		}
 	},
 	getS:async function(){
+    if(this.device!=null){
+      this.reconS();
+      return;
+    }
 		try{
-			$('#output').append('Requesting Bluetooth Device...<br>');
-			const device=await navigator.bluetooth.requestDevice({
-//				filters: [{services: [serviceUuid]}
-				filters: [{name: 'Shimano'}]
-//				optionalServices: [serviceUuid]
+			console.log('Requesting Bluetooth Device');
+			this.device=await navigator.bluetooth.requestDevice({
+				filters: [{name: 'Shimano'}],
+				optionalServices: [serviceUuid]
 			});
-			$('#output').append('Device: '+device+'<br>');
-			device.addEventListener('gattserverdisconnected',function(event){
-				$('#output').append('Device disconnected<br>');
+			console.log('Device: '+this.device);
+			$('#ind_dev').css({'background':'cyan'});
+			this.device.addEventListener('gattserverdisconnected',function(event){
+				console.log('Device disconnected');
+				resetInd();
 			});
-			this.gatt=device.gatt;
-			const server=await device.gatt.connect();
-			$('#output').append('Server: '+server+'<br>');
-			this.service=await server.getPrimaryService(serviceUuid);
-			$('#output').append('Service: '+this.service+'<br>');
+			const server=await this.device.gatt.connect();
+			$('#ind_srv').css({'background':'cyan'});
+			const service=await server.getPrimaryService(serviceUuid);
+			$('#ind_svc').css({'background':'cyan'});
+      await this.setWout(service);
+      await this.setAds(service);
+      this.writeAds(0xFC01);
 		}
-		catch(error) {
-			$('#output').append('Argh! '+error+'<br>');
+		catch(error){
+			resetInd();
+      this.device=null;
+			console.log('Argh! '+error);
 		}
 	},
 	reconS:async function(){
 		try{
-			const server= await this.gatt.connect();
-			$('#output').append('Gatt Recconected<br>');
-			this.service=await server.getPrimaryServices(serviceUuid);
-			$('#output').append('Service gotten '+service+'<br>');
+			$('#ind_dev').css({'background':'cyan'});
+			const server= await this.device.gatt.connect();
+			$('#ind_srv').css({'background':'cyan'});
+			const service=await server.getPrimaryService(serviceUuid);
+			$('#ind_svc').css({'background':'cyan'});
+      await this.setWout(service);
+      await this.setAds(service);
+      this.writeAds(0xFC01);
 		}
 		catch(error){
-			$('#output').append('Argh! '+error+'<br>');
+			console.log('Argh! '+error);
+			resetInd();
+      this.device=null;
 		}
 	},
-	bufDout:null,
+	bufDout:[],
 	queueDout:0,
 	setDout:async function(){
+		let scope=this;
 		let nchar=null;
-		$('#output').append('Try notification on');
-		this.bufDout=[];
+		console.log('Dout notification on');
 		try{
 			const characteristic=await this.service.getCharacteristic(charDoutUuid);
 			nchar=characteristic;
 			await nchar.startNotifications();
 			nchar.addEventListener('characteristicvaluechanged',function(event){
-				if(this.queueDout>0) clearTimeout(this.queueDout);
-				this.bufDout.push(event.target.value.getUint8(0));
-				this.queueDout=setTimeout(function(){
+				if(scope.queueDout>0) clearTimeout(scope.queueDout);
+				scope.bufDout.push(event.target.value.getUint8(0));
+				scope.queueDout=setTimeout(function(){
 					$('#output').append('Dout callback<br>');
-					this.bufDout.forEach(function(elm){
+					scope.bufDout.forEach(function(elm){
 						$('#output').append(elm+'<br>');
 					});
-					this.queueDout=0;
+					scope.queueDout=0;
 				},300);
 			});
 		}
 		catch(error){
-			$('#output').append('Argh! '+error+'<br>');
+			console.log('Argh! '+error);
 //			if(nchar!=null){
 //				nchar.addEventListener('characteristicvaluechanged',notiDout);
 //			}
@@ -124,54 +288,73 @@ let BTLE={
 	},
 	bufWout:[],
 	queueWout:0,
-	setWout:async function(){
+	setWout:async function(service){
 		let scope=this;
 		let nchar=null;
-		$('#output').append('Try notification on');
+		console.log('Wout notification on '+service.hasOwnProperty('getCharacteristic'));
 		try{
-			const characteristic=await this.service.getCharacteristic(charWoutUuid);
+			const characteristic=await service.getCharacteristic(charWoutUuid);
 			nchar=characteristic;
 			await nchar.startNotifications();
+			$('#ind_notw').css({'background':'cyan'});
 			nchar.addEventListener('characteristicvaluechanged',function(event){
-console.log('Wout CB');
 				if(scope.queueWout>0) clearTimeout(scope.queueWout);
 				let value=event.target.value;
+        $('#output').append('Wout '+value.byteLength+' bytes received<br>');
+        let wav=[];
 				for(let i=0;i<value.byteLength;i+=2){
-					scope.bufWout.push(value.getUint16(i));
+          if(i/2<4) wav.push(value.getUint16(i));
+          else wav.push(value.getInt16(i));
 				}
+				scope.bufWout.push(wav);
 				scope.queueWout=setTimeout(function(){
-					$('#output').append('Wout callback<br>');
+          WavX=[],WavY1=[],WavY2=[],WavY3=[];
 					scope.bufWout.forEach(function(elm){
-						$('#output').append(elm+'<br>');
-					});
+						$('#output').append(elm.toString()+'<br>');
+      			WavX.push(elm[0]);
+//      			WavX.push(elm[1]);
+      		  WavY1.push(Math.PI*2e6/elm[2]);
+      		  WavY2.push(elm[3]);
+            WavY3.push(elm[4]);
+          });
 					scope.queueWout=0;
 					scope.bufWout=[];
+          drawAll();
 				},300);
 			});
 		}
 		catch(error){
-			$('#output').append('Argh! '+error+'<br>');
+			console.log('Argh! '+error);
 //			if(nchar!=null){
 //				nchar.addEventListener('characteristicvaluechanged',notifCB);
 //			}
 		}
 	},
-	writeAds:async function(val){
-		$('#output').append('writeA char...'+this.service+'<br>');
+  charAds:null,
+	setAds:async function(service){
 		try{
-			const characteristic=await this.service.getCharacteristic(charAdsUuid);
-			let data=new Uint16Array(1);
-			data[0]=val;
-			await characteristic.writeValue(data);
+			this.charAds=await service.getCharacteristic(charAdsUuid);
 		}
 		catch(error){
 			$('#output').append('Argh! '+error+'<br>');
 		}
 	},
-	writeDin:async function(val){
-		$('#output').append('writeD char...'+this.service+'<br>');
+	writeAds:async function(val){
 		try{
-			const characteristic=await this.service.getCharacteristic(charDinUuid);
+			let data=new Uint8Array(2);
+			data[0]=val>>8;
+			data[1]=val;
+			await this.charAds.writeValue(data);
+		}
+		catch(error){
+			$('#output').append('Argh! '+error+'<br>');
+		}
+	},
+  charDin:null,
+	writeDin:async function(service,val){
+		$('#output').append('Write Data char...'+this.service+'<br>');
+		try{
+			const characteristic=await service.getCharacteristic(charDinUuid);
 			const data=new Uint8Array(1);
 			data[0]=val;
 			await characteristic.writeValue(data);
@@ -182,39 +365,63 @@ console.log('Wout CB');
 	}
 }
 
-function isWebBluetoothEnabled(){
-	if(navigator.bluetooth){
-		return true;
+////Plotting////
+marginPlot=30;
+gridPlot=function(xn,yn){
+  let w=canvas.width-2*marginPlot;
+  let h=canvas.height-2*marginPlot;
+	context.clearRect(0,0,canvas.width,canvas.height);
+	context.lineWidth=1.0;
+	context.strokeStyle='#444444';
+	for(var i=0;i<=xn;i++){
+		context.beginPath();
+		context.moveTo(w/xn*i+marginPlot,marginPlot);
+		context.lineTo(w/xn*i+marginPlot,canvas.height-marginPlot);
+		context.stroke();
 	}
-	else{
-		$('#output').append('Web Bluetooth API is not available.\n' +'Please make sure the "Experimental Web Platform features" flag is enabled.');
-		return false;
+	for(var i=0;i<=yn;i++){
+		context.beginPath();
+		context.moveTo(marginPlot,h/yn*i+marginPlot);
+		context.lineTo(canvas.width-marginPlot,h/yn*i+marginPlot);
+		context.stroke();
 	}
+}
+graphPlot=function(xw,yw,xr,yr,col){
+	context.lineWidth=1.0;
+	context.strokeStyle=col;
+	context.beginPath();
+	for(var i=0;i<xw.length;i++){
+    let p=coordPlot(xw[i],yw[i],xr,yr);
+		if(i==0) context.moveTo(p.x,p.y);
+		else context.lineTo(p.x,p.y);
+	}
+	context.stroke();
+}
+circlePlot=function(xw,yw,xr,yr,col){
+	context.fillStyle=col;
+	context.beginPath();
+  let p=coordPlot(xw,yw,xr,yr);
+  context.arc(p.x,p.y,8,0,2*Math.PI,true);
+  context.fill();
+	context.stroke();
+}
+textPlot=function(xw,yw,xr,yr,str,col){
+	context.fillStyle=col;
+	context.font="20px";
+  let p=coordPlot(xw,yw,xr,yr);
+  context.fillText(str,p.x-20,p.y-20);
+	context.stroke();
+}
+coordPlot=function(xw,yw,xr,yr){
+  let w=canvas.width-2*marginPlot;
+  let h=canvas.height-2*marginPlot;
+  return {
+    x:(xw-xr[0])/(xr[1]-xr[0])*w+marginPlot,
+	  y:h-(yw-yr[0])/(yr[1]-yr[0])*h+marginPlot
+  };
 }
 
 
-$(document).ready(function(){
-	if('serviceWorker' in navigator){
-		navigator.serviceWorker.register('service-worker.js');
-	}
-	$('#connect').click(function(event){
-		if(isWebBluetoothEnabled()) {
-			BTLE.getS();
-		}
-	});
-	$('#notif').click(function(event){
-		BTLE.setWout();
-	});
-	$('#log').click(function(event){
-		BTLE.writeAds(0x1234);
-	});
-	$('#discon').click(function(event){
-		BTLE.discon();
-	});
-	$('#clrlog').click(function(event){
-		$('#output').empty();
-	});
-});
 </script>
 
 </body>
