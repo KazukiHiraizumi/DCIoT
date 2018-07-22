@@ -19,11 +19,11 @@
 }
 #control button{
 	width:100%;
-	height:40px;
+	height:50px;
   font-size:1.5em;
 }
 #control td{
-	width:40px;
+	width:20%;
 }
 #output{
   font-size:0.8em;
@@ -38,19 +38,16 @@
 <body>
 <button id="discon">切断</button>
 <button id="clrlog">クリア</button><br clear="all">
-<div>
-<div style="float:left;">
-<canvas id="plot" style="width:500px;height:400px;background-color:ivory" ></canvas>
+<div style="width:100%;height:400px;background-color:ivory">
+<canvas id="plot" style="width:100%;height:100%;background-color:ivory" ></canvas>
 </div>
 <div>
-<table id="control">
-<tr><td colspan="3"><hr>
+<table id="control" style="width:100%;">
+<tr><td rowspan="5"><button>送信</button><td rowspan="5">
 <tr><td><td rowspan="2"><button id="up">↑</button>
 <tr><td rowspan="2"><button id="left">←</button><td rowspan="2"><button id="right">→</button>
 <tr><td rowspan="2"><button id="down">↓</button>
 <tr><td><td>
-<tr><td colspan="3"><hr>
-<tr><td colspan="3"><button>送信</button>
 </table>
 </div>
 </div>
@@ -62,7 +59,15 @@
 <h3>Debugging</h3>
 <div id="output"></div>
 
-<script>
+<script type="module">
+//BLE UUIDs///
+import BTLE from "./btle.js";
+BTLE.serviceUuid='10014246-f5b0-e881-09ab-42000ba24f83';
+BTLE.charAdsUuid='20024246-f5b0-e881-09ab-42000ba24f83';
+BTLE.charDinUuid='20034246-f5b0-e881-09ab-42000ba24f83';
+BTLE.charDoutUuid='20044246-f5b0-e881-09ab-42000ba24f83';
+BTLE.charWoutUuid='20054246-f5b0-e881-09ab-42000ba24f83';
+
 function isWebBluetoothEnabled(){
 	if(navigator.bluetooth){
 		return true;
@@ -78,21 +83,21 @@ function resetInd(){
 }
 
 let canvas,context;
-let BrkX=[0,10,20,50,100,200,500];
-let BrkY=[0,100,100,50,40,30,25];
+let BrkX=[0,10,20,50,100,200,500,800];
+let BrkY=[0,100,100,50,40,30,25,20];
 let BrkC=-1;
 let WavX=[];
 let WavY1=[];
 let WavY2=[];
 let WavY3=[];
-let RangeX=[0,500];
+let RangeX=[0,800];
 let RangeY1=[0,6*1000];
 let RangeY2=[-3*100,3*100];
 let RangeY3=[-3*1000,3*1000];
 let RangeB=[0,6*50];
 
 function drawAll(){
-  gridPlot(10,6);
+  gridPlot(8,6);
 	graphPlot(WavX,WavY1,RangeX,RangeY1,'green');
   graphPlot(WavX,WavY2,RangeX,RangeY2,'red');
   graphPlot(WavX,WavY3,RangeX,RangeY3,'blue');
@@ -114,7 +119,7 @@ $(document).ready(function(){
 
 	$('#connect').click(function(event){
 		if(isWebBluetoothEnabled()) {
-			BTLE.getS();
+			BTLE.ready('ready');
 		}
 	});
 	$('#discon').click(function(event){
@@ -154,220 +159,71 @@ $(document).ready(function(){
     }
   });
   $('#left').click(function(event){
-    if(BrkC>0){
-      let x1=BrkX[BrkC],x2;
-      let v=Math.floor((256/3*Math.log10(x1)+1));
-      for(;;v--){
-        x2=Math.floor(Math.pow(10,3*(v+1)/256));
-        if(x2<x1) break;
-      }
-      BrkX[BrkC]=x2;
+    if(BrkC>0 && BrkC<8){
+      let x1=BrkX[BrkC]*0.95;
+      let x2=Math.floor(-64+8*Math.sqrt(64+2*x1));
+      let x3=Math.floor(x2*x2/128+x2);
+      if(BrkX[BrkC]>x3) BrkX[BrkC]=x3;
+      else BrkX[BrkC]--;
       drawAll();
     }
   });
   $('#right').click(function(event){
-    if(BrkC>0){
-      let x1=BrkX[BrkC],x2;
-      let v=Math.floor((256/3*Math.log10(x1)+1));
-      for(;;v++){
-        x2=Math.floor(Math.pow(10,3*(v+1)/256));
-        if(x2>x1) break;
-      }
-      BrkX[BrkC]=x2;
+    if(BrkC>0 && BrkC<8){
+      let x1=BrkX[BrkC]*1.05;
+      let x2=Math.floor(-64+8*Math.sqrt(64+2*x1));
+      let x3=Math.floor(x2*x2/128+x2);
+      if(BrkX[BrkC]<x3) BrkX[BrkC]=x3;
+      else BrkX[BrkC]++;
       drawAll();
     }
   });
+
+  BTLE.on('ready',function(){
+    console.log('BLE ready');
+    BTLE.writeAds(0xFA01); //ROM dump
+  });
+  BTLE.on('disconnect',function(){
+    resetInd();
+  });
+  BTLE.on('error',function(err){
+    resetInd();
+    console.log('btle err:'+err);
+  });
+  BTLE.on('connect',function(err){
+    $('#ind_dev').css({'background':'cyan'});
+  });
+  BTLE.on('server',function(){
+    $('#ind_srv').css({'background':'cyan'});
+  });
+  BTLE.on('service',function(){
+    $('#ind_svc').css({'background':'cyan'});
+  });
+  BTLE.on('notif_w',function(){
+    $('#ind_notw').css({'background':'cyan'});
+  });
+  BTLE.on('notif_d',function(){
+    $('#ind_notd').css({'background':'cyan'});
+  });
+  BTLE.on('wave',function(buf){
+    WavX=[],WavY1=[],WavY2=[],WavY3=[];
+	  buf.forEach(function(elm){
+		  $('#output').append(elm.toString()+'<br>');
+      WavX.push(elm[0]);
+//    WavX.push(elm[1]);
+      WavY1.push(Math.PI*2e6/elm[2]);
+      WavY2.push(elm[3]);
+      WavY3.push(elm[4]);
+    });
+    drawAll();
+  });
 });
 
-//BLE///
-const serviceUuid='10014246-f5b0-e881-09ab-42000ba24f83';
-const charAdsUuid='20024246-f5b0-e881-09ab-42000ba24f83';
-const charDinUuid='20034246-f5b0-e881-09ab-42000ba24f83';
-const charDoutUuid='20044246-f5b0-e881-09ab-42000ba24f83';
-const charWoutUuid='20054246-f5b0-e881-09ab-42000ba24f83';
 
-const ab2str = function(buf) {
-  let bufView = new Uint8Array(buf);
-  return String.fromCharCode.apply(null, bufView);
-}
-const str2ab = function(str) {
-  let encodedString = unescape(encodeURIComponent(str));
-  let bytes = new Uint8Array(encodedString.length);
-  for (let i=0;i<encodedString.length;++i){
-    bytes[i]=encodedString.charCodeAt(i);
-  }
-  return bytes.buffer;
-}
-
-let BTLE={
-	device:null,
-	discon:function(){
-		if(this.device==null){
-			console.log('No GATT to disconnect');
-		}
-		else{
-			this.device.gatt.disconnect();
-		}
-	},
-	getS:async function(){
-    if(this.device!=null){
-      this.reconS();
-      return;
-    }
-		try{
-			console.log('Requesting Bluetooth Device');
-			this.device=await navigator.bluetooth.requestDevice({
-				filters: [{name: 'Shimano'}],
-				optionalServices: [serviceUuid]
-			});
-			console.log('Device: '+this.device);
-			$('#ind_dev').css({'background':'cyan'});
-			this.device.addEventListener('gattserverdisconnected',function(event){
-				console.log('Device disconnected');
-				resetInd();
-			});
-			const server=await this.device.gatt.connect();
-			$('#ind_srv').css({'background':'cyan'});
-			const service=await server.getPrimaryService(serviceUuid);
-			$('#ind_svc').css({'background':'cyan'});
-      await this.setWout(service);
-      await this.setAds(service);
-      this.writeAds(0xFC01);
-		}
-		catch(error){
-			resetInd();
-      this.device=null;
-			console.log('Argh! '+error);
-		}
-	},
-	reconS:async function(){
-		try{
-			$('#ind_dev').css({'background':'cyan'});
-			const server= await this.device.gatt.connect();
-			$('#ind_srv').css({'background':'cyan'});
-			const service=await server.getPrimaryService(serviceUuid);
-			$('#ind_svc').css({'background':'cyan'});
-      await this.setWout(service);
-      await this.setAds(service);
-      this.writeAds(0xFC01);
-		}
-		catch(error){
-			console.log('Argh! '+error);
-			resetInd();
-      this.device=null;
-		}
-	},
-	bufDout:[],
-	queueDout:0,
-	setDout:async function(){
-		let scope=this;
-		let nchar=null;
-		console.log('Dout notification on');
-		try{
-			const characteristic=await this.service.getCharacteristic(charDoutUuid);
-			nchar=characteristic;
-			await nchar.startNotifications();
-			nchar.addEventListener('characteristicvaluechanged',function(event){
-				if(scope.queueDout>0) clearTimeout(scope.queueDout);
-				scope.bufDout.push(event.target.value.getUint8(0));
-				scope.queueDout=setTimeout(function(){
-					$('#output').append('Dout callback<br>');
-					scope.bufDout.forEach(function(elm){
-						$('#output').append(elm+'<br>');
-					});
-					scope.queueDout=0;
-				},300);
-			});
-		}
-		catch(error){
-			console.log('Argh! '+error);
-//			if(nchar!=null){
-//				nchar.addEventListener('characteristicvaluechanged',notiDout);
-//			}
-		}
-	},
-	bufWout:[],
-	queueWout:0,
-	setWout:async function(service){
-		let scope=this;
-		let nchar=null;
-		console.log('Wout notification on '+service.hasOwnProperty('getCharacteristic'));
-		try{
-			const characteristic=await service.getCharacteristic(charWoutUuid);
-			nchar=characteristic;
-			await nchar.startNotifications();
-			$('#ind_notw').css({'background':'cyan'});
-			nchar.addEventListener('characteristicvaluechanged',function(event){
-				if(scope.queueWout>0) clearTimeout(scope.queueWout);
-				let value=event.target.value;
-        $('#output').append('Wout '+value.byteLength+' bytes received<br>');
-        let wav=[];
-				for(let i=0;i<value.byteLength;i+=2){
-          if(i/2<4) wav.push(value.getUint16(i));
-          else wav.push(value.getInt16(i));
-				}
-				scope.bufWout.push(wav);
-				scope.queueWout=setTimeout(function(){
-          WavX=[],WavY1=[],WavY2=[],WavY3=[];
-					scope.bufWout.forEach(function(elm){
-						$('#output').append(elm.toString()+'<br>');
-      			WavX.push(elm[0]);
-//      			WavX.push(elm[1]);
-      		  WavY1.push(Math.PI*2e6/elm[2]);
-      		  WavY2.push(elm[3]);
-            WavY3.push(elm[4]);
-          });
-					scope.queueWout=0;
-					scope.bufWout=[];
-          drawAll();
-				},300);
-			});
-		}
-		catch(error){
-			console.log('Argh! '+error);
-//			if(nchar!=null){
-//				nchar.addEventListener('characteristicvaluechanged',notifCB);
-//			}
-		}
-	},
-  charAds:null,
-	setAds:async function(service){
-		try{
-			this.charAds=await service.getCharacteristic(charAdsUuid);
-		}
-		catch(error){
-			$('#output').append('Argh! '+error+'<br>');
-		}
-	},
-	writeAds:async function(val){
-		try{
-			let data=new Uint8Array(2);
-			data[0]=val>>8;
-			data[1]=val;
-			await this.charAds.writeValue(data);
-		}
-		catch(error){
-			$('#output').append('Argh! '+error+'<br>');
-		}
-	},
-  charDin:null,
-	writeDin:async function(service,val){
-		$('#output').append('Write Data char...'+this.service+'<br>');
-		try{
-			const characteristic=await service.getCharacteristic(charDinUuid);
-			const data=new Uint8Array(1);
-			data[0]=val;
-			await characteristic.writeValue(data);
-		}
-		catch(error){
-			$('#output').append('Argh! '+error+'<br>');
-		}
-	}
-}
 
 ////Plotting////
-marginPlot=30;
-gridPlot=function(xn,yn){
+const marginPlot=30;
+const gridPlot=function(xn,yn){
   let w=canvas.width-2*marginPlot;
   let h=canvas.height-2*marginPlot;
 	context.clearRect(0,0,canvas.width,canvas.height);
@@ -386,7 +242,7 @@ gridPlot=function(xn,yn){
 		context.stroke();
 	}
 }
-graphPlot=function(xw,yw,xr,yr,col){
+const graphPlot=function(xw,yw,xr,yr,col){
 	context.lineWidth=1.0;
 	context.strokeStyle=col;
 	context.beginPath();
@@ -397,7 +253,7 @@ graphPlot=function(xw,yw,xr,yr,col){
 	}
 	context.stroke();
 }
-circlePlot=function(xw,yw,xr,yr,col){
+const circlePlot=function(xw,yw,xr,yr,col){
 	context.fillStyle=col;
 	context.beginPath();
   let p=coordPlot(xw,yw,xr,yr);
@@ -405,14 +261,14 @@ circlePlot=function(xw,yw,xr,yr,col){
   context.fill();
 	context.stroke();
 }
-textPlot=function(xw,yw,xr,yr,str,col){
+const textPlot=function(xw,yw,xr,yr,str,col){
 	context.fillStyle=col;
 	context.font="20px";
   let p=coordPlot(xw,yw,xr,yr);
   context.fillText(str,p.x-20,p.y-20);
 	context.stroke();
 }
-coordPlot=function(xw,yw,xr,yr){
+const coordPlot=function(xw,yw,xr,yr){
   let w=canvas.width-2*marginPlot;
   let h=canvas.height-2*marginPlot;
   return {

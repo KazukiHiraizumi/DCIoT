@@ -34,7 +34,7 @@ static unsigned char ModQ; //0:discon,1:adv,2:connect
 //diag
 static unsigned short Timer[]={0,0,0,0,0};//wallet scan,adv off,discon,battery
 //Castum
-unsigned short cadds;
+unsigned short CT_adds;
 unsigned short CT_rev=0;
 unsigned short CT_pwm;
 unsigned long CT_dt,CT_time;
@@ -45,6 +45,7 @@ static char *CT_buf=work_buffer+192;
 void Timer_do();//Do every 1 sec
 void WV_do(char *);//Do on receiving "%WV"
 void WC_do(char *);//Do on receiving "%WC"
+void CONN_do(char *);//Do on receiving "%CONNECT
 void xdelay(int ms){
     int tc=OSC_Clock/_XTAL_FREQ;
     int dn=ms*tc;
@@ -81,7 +82,7 @@ int rn487x_cmd(){
 int rn487x_reset(int adv){
     DO_RXIND=1;
     TR_RXIND=0;
-    xdelay(50);
+    xdelay(100);
 //    while(!DI_RESET){//If ResetIC impremented
 //       VSO_puts("RN487x external reset\n");
 //        xdelay(1000);
@@ -89,13 +90,14 @@ int rn487x_reset(int adv){
 //    }
     TR_RESET=0;
     DO_RESET=0;
-    xdelay(100);
+    xdelay(200);
     DO_RESET=1;
     TR_RESET=1;
     if(USART_purge("%REBOOT")==0){
         rn487x_cmd();
-        if(!adv) rn487x_aoff();
-        else  rn487x_aon();
+        USART_purge(Prompt);
+        if(adv==0) rn487x_aoff();
+        else rn487x_aon();
         return 0;
     }
     else return -1;
@@ -104,6 +106,7 @@ int rn487x_reboot(){ return rn487x_reset(0);}
 void setup(){
     int i,j,k;
     OSC_init(_XTAL_FREQ);
+    xdelay(500);
 Restart:
     USART_init(115200L);
     TMR0_init();
@@ -182,18 +185,76 @@ ADVERTISE_LOOP:
         int cmd=r2buf[6];
 //        switch(cmd){
 //        case 0x22:
-            ModQ=12;
+            ModQ=201;
 //        }
     }
     switch(ModQ){
     case 2:
         goto CONNECT;
-    case 12:
+    case 201:
         goto WAVREC;
     }
     goto ADVERTISE_LOOP;
+CONNECT:
+    ModQ=2;
+    DO_RXIND=0;
+    Timer[0]=0;
+    Timer[2]=30000;
+    TMR0_cemaphore=0;
+    xdelay(10);
+    VSO_puts("//Connect mode\n");
+CONNECT_LOOP:
+    k=USART_gets(r1buf,'%');
+    if(DI_STAT1 || DI_STAT2){//Disconnected
+        VSO_puts("//Disconnected/");VSO_putd(DI_STAT1);VSO_puts(",");VSO_putd(DI_STAT2);VSO_cr();
+        Timer[0]=0;
+        ModQ=1;
+    }
+    else if(k>0){
+        if(!strncmp(r1buf,"WV",2)){
+            WV_do(r1buf);
+        }
+        else if(!strncmp(r1buf,"WC",2)){
+            WC_do(r1buf);
+        }
+        else if(!strncmp(r1buf,"CON",3)){//connect
+            CONN_do(r1buf);
+        }
+        r1buf[0]=0;
+    }
+    else if(k==0){ //End with CR
+//        VSO_puts("gets=");VSO_puts(r1buf);VSO_cr();
+        r1buf[0]=0;
+    }
+    if((r2len=USART2_gets(r2buf))>0){
+        int cmd=r2buf[6];
+        VSO_puts("CT:");VSO_putd(cmd);VSO_cr();
+        switch(cmd){
+        case 0x2:  //parameter receive
+            ModQ=102;
+            break;
+        case 0x22:  //wave data
+            ModQ=202;
+            break;
+        }
+    }
+    if(TMR0_cemaphore){
+        Timer_do();
+        TMR0_cemaphore--;
+    }
+    switch(ModQ){
+    case 1:
+        goto ADVERTISE;
+    case 102:
+        goto REGDUMP;
+    case 202:
+        goto WAVREC;
+    case 255:
+        rn487x_reboot();
+        goto ADVERTISE;
+    }
+    goto CONNECT_LOOP;
 WAVREC:
-    ModQ=12;
     VSO_puts("//Rec mode\n");
 //    rn487x_aoff();
     CT_rev=CT_pwm=CT_dt=CT_tens=0;
@@ -223,64 +284,32 @@ WAVREC_LOOP:
         }
     }
     VSO_puts("CT_done:");VSO_putd(CT_rev);VSO_cr();
-    goto ADVERTISE;
-CONNECT:
+    if(ModQ==201) goto ADVERTISE;
+    else goto CONNECT;
+REGDUMP:
+    VSO_puts("//Register dump\n");
+REGDUMP_LOOP:
+    VSO_putd(r2buf[7]);VSO_puts(",");VSO_putd(r2buf[8]);VSO_cr();
+    TMR1_set(200);
+    while(!TMR1_up){
+        if((r2len=USART2_gets(r2buf))>0){
+            switch(r2buf[6]){
+            case 0x02:
+                goto REGDUMP_LOOP;
+            case 0x03:
+                goto REGDUMP_EXIT;
+            }
+        }
+    }
+REGDUMP_EXIT:
     ModQ=2;
-    DO_RXIND=0;
-    Timer[0]=0;
-    Timer[2]=10;
-    TMR0_cemaphore=0;
-    xdelay(10);
-    VSO_puts("//Connect mode\n");
-CONNECT_LOOP:
-    k=USART_gets(r1buf,'%');
-    if(DI_STAT1 || DI_STAT2){//Disconnected
-        VSO_puts("//Disconnected/");VSO_putd(DI_STAT1);VSO_puts(",");VSO_putd(DI_STAT2);VSO_cr();
-        Timer[0]=Timer[2]=0;
-        ModQ=1;
-    }
-    else if(k>0){
-        if(!strncmp(r1buf,"WV",2)){
-            Timer[2]=30;//disconnect time
-            WV_do(r1buf);
-        }
-        else if(!strncmp(r1buf,"WC",2)){
-            Timer[2]=30;//disconnect timer
-            WC_do(r1buf);
-        }
-        r1buf[0]=0;
-    }
-    else if(k==0){ //End with CR
-//        VSO_puts("gets=");VSO_puts(r1buf);VSO_cr();
-        r1buf[0]=0;
-    }
-    if(USART2_gets(r2buf)>0){
-        int cmd=r2buf[6];
-        switch(cmd){
-        case 0x2:
-            ModQ=21;
-        case 0x22:
-            ModQ=22;
-        }
-    }
-    if(TMR0_cemaphore){
-        Timer_do();
-        TMR0_cemaphore--;
-    }
-    switch(ModQ){
-    case 1:
-        goto ADVERTISE;
-    case 99:
-        rn487x_reboot();
-        goto ADVERTISE;
-    }
-    goto CONNECT_LOOP;
+    goto CONNECT;
 }
 void Timer_do(){
     int cflag,otim,ctim;
 T0UP:
     if(Timer[0]==0) goto T1UP; else if(--Timer[0]>0) goto T1UP;
-    if(ModQ==2) ModQ=99; //reset
+    if(ModQ==2) ModQ=255; //reset
 T1UP://LED blink
     if(Timer[1]==0) goto T2UP; else if(--Timer[1]>0) goto T2UP;
     if(ModQ==1){
@@ -298,14 +327,11 @@ T2UP://disconnect timer
         VSO_puts("//Connection Timeout\n");
         ModQ=1;
     }
-T3UP://cover scan
+T3UP://power off
     if(Timer[3]==0) goto T4UP; else if(--Timer[3]>0) goto T4UP;
-/*    if(ModQ==1){
-        VSO_puts("Loopback");VSO_cr();
-        char *s="0123456789";
-        for(;*s;s++) USART2_putc(*s);
-        Timer[3]=3;
-    }*/
+    TRISBbits.RB4=1;
+    TRISBbits.RB5=1;
+    VSO_puts("Power off\n");
 T4UP://auto advertise timer
     if(Timer[4]==0) goto T5UP; else if(--Timer[4]>0) goto T5UP;
 T5UP:
@@ -314,7 +340,8 @@ T5UP:
 void mkwav();
 void WV_do(char *rs){
     int a,b,i;
-    unsigned int han,dat;
+    unsigned int han;
+    unsigned long dat;
     XSART_parse(rs,&han,&dat);//chara handle
     DO_RXIND=0;
     xdelay(5);
@@ -323,11 +350,8 @@ void WV_do(char *rs){
     USART_purge(Prompt);//flush cmd buffer
     switch(han){
     case CH_ADS:
-        VSO_puts("ADS=");VSO_putx(dat);VSO_cr();
-        if(dat==0xFA01){
-            USART2_cmd(1,0);
-        }
-        else if(dat==0xFC01){
+        VSO_puts("ADS=");VSO_putlx(dat);VSO_cr();
+        if(dat==0xFC01){//Request to send wave data
             char *buf=CT_buf;
 //            mkwav();
              __verbose=0;
@@ -341,20 +365,36 @@ void WV_do(char *rs){
                 XSART_putSHW(CH_WOUT);XSART_putInt16(n);XSART_putInt16(t);XSART_putInt16(dt);XSART_putInt16(p);XSART_putInt16(f);USART_cr();
                 USART_purge(Prompt);
                 VSO_puts("[");VSO_putd(n);VSO_puts(",");VSO_putd(dt);VSO_puts("]\n");
-                Timer[2]=10;//extend connection
             }
             __verbose=1;
         }
+        else if(dat==0xFA01){//Request to send ROM data
+            LATBbits.LB4=1;
+            LATBbits.LB5=1;
+            TRISBbits.RB4=0;
+            TRISBbits.RB5=0;
+            xdelay(1000);
+            USART2_cmd(1,0);
+            Timer[3]=30;
+        }
         else if(dat<256){
-            cadds=dat;
+            CT_adds=dat;
         }
         break;
     }
 }
 void WC_do(char *rs){
-    int han,dat;
+    unsigned int han;
+    unsigned long dat;
     XSART_parse(rs,&han,&dat);//chara handle
     VSO_puts("WC=");VSO_putx(han);VSO_cr();
+}
+void CONN_do(char *rs){
+    unsigned int han;
+    unsigned long dat;
+    XSART_parse(rs,&han,&dat);
+    VSO_puts("CONN=");VSO_putx(han);VSO_puts(",");VSO_putlx(dat);VSO_cr();
+    rn487x_prog("LB\n");
 }
 
 //Comm libs b.w. RN487x
@@ -397,8 +437,8 @@ void XSART_putSHW(int d){
     sprintf(s,"SHW,%04x,",d);    
     USART_puts(s);
 }
-unsigned int hex2byte(char *s){
-    unsigned int val=0;
+unsigned long hex2byte(char *s){
+    unsigned long val=0;
     for(;;val<<=4){
         int c=*s;
         int h=c-'0';
@@ -420,7 +460,7 @@ int hex2str(char *src,char *dst){
     *dst=0;
     return n;
 }
-int XSART_parse(unsigned char *src,unsigned int *handle,unsigned int *val){
+int XSART_parse(unsigned char *src,unsigned int *handle,unsigned long *val){
     char *d1=strchr(src,',');
     if(d1==NULL) return -1;
     char *d2=strchr(d1+1,',');

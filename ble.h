@@ -1,7 +1,7 @@
 #ifndef BLECMD_H
 #define	BLECMD_H
 
-extern unsigned int hex2byte(char *);
+extern unsigned long hex2byte(char *);
 extern int hex2str(char *src,char *dest); //convert hex string to ascii string
 extern void str2hex(char *src,char *dest);
 extern void d2hex(int ,char *dest);
@@ -9,7 +9,7 @@ extern void lu2hex(unsigned long ,char *dest);
 extern void lx2hex(unsigned long ,char *dest);
 
 //Comm Libs
-extern int XSART_parse(char *src,unsigned int *,unsigned int *);
+extern int XSART_parse(char *src,unsigned int *handle,unsigned long *value);
 extern void USART_2stup(char *);
 extern void USART_cr();
 extern void XSART_putSHW(int);
