@@ -40,6 +40,7 @@ unsigned short CT_pwm;
 unsigned long CT_dt,CT_time;
 signed long CT_tens;
 static char *CT_buf=work_buffer+192;
+static void CT_send();
 
 //handler
 void Timer_do();//Do every 1 sec
@@ -230,7 +231,10 @@ CONNECT_LOOP:
         int cmd=r2buf[6];
         VSO_puts("CT:");VSO_putd(cmd);VSO_cr();
         switch(cmd){
-        case 0x2:  //parameter receive
+        case 0x01:  //echo back
+            VSO_puts("CMD01\n");
+            break;
+        case 0x02:  //parameter receive
             ModQ=102;
             break;
         case 0x22:  //wave data
@@ -263,11 +267,12 @@ WAVREC_LOOP:
     CT_time=((unsigned long)r2buf[2]<<16)+((unsigned short)r2buf[3]<<8)+r2buf[4];
     CT_pwm+=r2buf[10];
     CT_dt+=((unsigned short)r2buf[7]<<8)+r2buf[8];
-    CT_tens+=((short)(signed char)r2buf[11]<<8)+r2buf[12];
+    CT_tens+=((short)(signed char)r2buf[13]<<8)+r2buf[14];
     if((CT_rev&0x0F)==0x0F){
         int tmsec=CT_time>>8;
-        char *buf=CT_buf+(CT_rev>>4)*10;
-        *(unsigned short *)buf=CT_rev;
+        int rev=CT_rev<800? CT_rev:800;
+        char *buf=CT_buf+(rev>>4)*10;
+        *(unsigned short *)buf=rev;
         *(unsigned short *)(buf+2)=tmsec;
         *(unsigned short *)(buf+4)=CT_dt>>4;
         *(unsigned short *)(buf+6)=CT_pwm>>4;
@@ -285,7 +290,10 @@ WAVREC_LOOP:
     }
     VSO_puts("CT_done:");VSO_putd(CT_rev);VSO_cr();
     if(ModQ==201) goto ADVERTISE;
-    else goto CONNECT;
+    else{
+        CT_send();
+        goto CONNECT;
+    }
 REGDUMP:
     VSO_puts("//Register dump\n");
 REGDUMP_LOOP:
@@ -337,7 +345,24 @@ T4UP://auto advertise timer
 T5UP:
     return;
 }
-void mkwav();
+//static void mkwav();
+static void CT_send(){
+    char *buf=CT_buf;
+//  mkwav();
+    __verbose=0;
+    for(;CT_rev>0;buf+=10){
+        unsigned short n=*(unsigned short *)buf;
+        unsigned short t=*(unsigned short *)(buf+2);
+        unsigned short dt=*(unsigned short *)(buf+4);
+        unsigned short p=*(unsigned short *)(buf+6);
+        signed short f=*(signed short *)(buf+8);
+        if(n==0) break;
+        XSART_putSHW(CH_WOUT);XSART_putInt16(n);XSART_putInt16(t);XSART_putInt16(dt);XSART_putInt16(p);XSART_putInt16(f);USART_cr();
+        USART_purge(Prompt);
+        VSO_puts("[");VSO_putd(n);VSO_puts(",");VSO_putd(dt);VSO_puts("]\n");
+     }
+     __verbose=1;
+}
 void WV_do(char *rs){
     int a,b,i;
     unsigned int han;
@@ -352,21 +377,7 @@ void WV_do(char *rs){
     case CH_ADS:
         VSO_puts("ADS=");VSO_putlx(dat);VSO_cr();
         if(dat==0xFC01){//Request to send wave data
-            char *buf=CT_buf;
-//            mkwav();
-             __verbose=0;
-            for(;CT_rev>0;buf+=10){
-                unsigned short n=*(unsigned short *)buf;
-                unsigned short t=*(unsigned short *)(buf+2);
-                unsigned short dt=*(unsigned short *)(buf+4);
-                unsigned short p=*(unsigned short *)(buf+6);
-                signed short f=*(signed short *)(buf+8);
-                if(n==0) break;
-                XSART_putSHW(CH_WOUT);XSART_putInt16(n);XSART_putInt16(t);XSART_putInt16(dt);XSART_putInt16(p);XSART_putInt16(f);USART_cr();
-                USART_purge(Prompt);
-                VSO_puts("[");VSO_putd(n);VSO_puts(",");VSO_putd(dt);VSO_puts("]\n");
-            }
-            __verbose=1;
+            CT_send();
         }
         else if(dat==0xFA01){//Request to send ROM data
             LATBbits.LB4=1;
@@ -375,10 +386,21 @@ void WV_do(char *rs){
             TRISBbits.RB5=0;
             xdelay(1000);
             USART2_cmd(1,0);
-            Timer[3]=30;
+            Timer[3]=30;//Power-off timer
+            {
+                unsigned short n=0xB000;
+                unsigned short t=0x1234;
+                XSART_putSHW(CH_WOUT);XSART_putInt16(n);XSART_putInt16(t);USART_cr();
+                USART_purge(Prompt);
+            }
         }
-        else if(dat<256){
+        else if(dat<0x1000){
             CT_adds=dat;
+            {
+                unsigned short n=0xA000|CT_adds;
+                XSART_putSHW(CH_WOUT);XSART_putInt16(n);USART_cr();
+                USART_purge(Prompt);
+            }
         }
         break;
     }
@@ -472,7 +494,7 @@ int XSART_parse(unsigned char *src,unsigned int *handle,unsigned long *val){
 
 
 ////For testing
-void mkwav(){
+static void mkwav(){
     CT_dt=3000L*32;
     CT_pwm=100*32;
     CT_tens=1000L*32;

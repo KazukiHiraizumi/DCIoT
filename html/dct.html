@@ -53,7 +53,7 @@
 </div>
 <br clear="all">
 <table id="ind" border>
-<tr><td><button id="connect">接続</button><th id="ind_dev">Device<th id="ind_srv">Server<th id="ind_svc">Service<th id="ind_notd">Notify<th id="ind_notw">Notify
+<tr><td><button id="connect">接続</button><th id="ind_dev">Device<th id="ind_srv">Server<th id="ind_svc">Service<th id="ind_notif">Notify<td><button id="upload">UP</button>
 </table>
 
 <h3>Debugging</h3>
@@ -64,9 +64,8 @@
 import BTLE from "./btle.js";
 BTLE.serviceUuid='10014246-f5b0-e881-09ab-42000ba24f83';
 BTLE.charAdsUuid='20024246-f5b0-e881-09ab-42000ba24f83';
-BTLE.charDinUuid='20034246-f5b0-e881-09ab-42000ba24f83';
-BTLE.charDoutUuid='20044246-f5b0-e881-09ab-42000ba24f83';
-BTLE.charWoutUuid='20054246-f5b0-e881-09ab-42000ba24f83';
+BTLE.charDataUuid='20034246-f5b0-e881-09ab-42000ba24f83';
+BTLE.charNotifUuid='20054246-f5b0-e881-09ab-42000ba24f83';
 
 function isWebBluetoothEnabled(){
 	if(navigator.bluetooth){
@@ -124,6 +123,9 @@ $(document).ready(function(){
 	});
 	$('#discon').click(function(event){
 		BTLE.discon();
+	});
+	$('#upload').click(function(event){
+		BTLE.writeAds(0xFC01);
 	});
 	$('#clrlog').click(function(event){
 		$('#output').empty();
@@ -199,23 +201,31 @@ $(document).ready(function(){
   BTLE.on('service',function(){
     $('#ind_svc').css({'background':'cyan'});
   });
-  BTLE.on('notif_w',function(){
-    $('#ind_notw').css({'background':'cyan'});
+  BTLE.on('notif',function(){
+    $('#ind_notif').css({'background':'cyan'});
   });
-  BTLE.on('notif_d',function(){
-    $('#ind_notd').css({'background':'cyan'});
-  });
-  BTLE.on('wave',function(buf){
-    WavX=[],WavY1=[],WavY2=[],WavY3=[];
-	  buf.forEach(function(elm){
-		  $('#output').append(elm.toString()+'<br>');
-      WavX.push(elm[0]);
-//    WavX.push(elm[1]);
-      WavY1.push(Math.PI*2e6/elm[2]);
-      WavY2.push(elm[3]);
-      WavY3.push(elm[4]);
-    });
-    drawAll();
+  BTLE.timeout=null;
+  BTLE.on('receive',function(data){
+    let des=data.getUint16(0);
+    console.log('data.length='+data.byteLength+' [0]'+des);
+    if(this.timeout!=null) clearTimeout(this.timeout);
+    if(des<0x1000){
+      if(des==0){ WavX=[]; WavY1=[]; WavY2=[]; WavY3=[]; }
+      WavX.push(des);
+//    WavX.push(data.getUint16(2));
+      WavY1.push(Math.PI*2e6/data.getUint16(4));
+      WavY2.push(data.getUint16(6));
+      WavY3.push(data.getInt16(8));
+      let who=this;
+      this.timeout=setTimeout(function(){
+        drawAll();
+        who.timeout=null;
+      },300);
+    }
+    else if((des&0xF000)==0xA000){  //Address verify
+    }
+    else if((des&0xF000)==0xB000){  //Param read (max.8 bytes)
+    }
   });
 });
 

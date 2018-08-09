@@ -15,12 +15,6 @@ const str2ab = function(str) {
 
 let BTLE=new EventEmitter();
 BTLE.device=null;
-BTLE.bufDout=[];
-BTLE.queueDout=null;
-BTLE.bufWout=[];
-BTLE.queueWout=null;
-BTLE.charAds=null;
-BTLE.charDin=null;
 BTLE.link=false;
 BTLE.discon=function(){
   if(this.device==null){
@@ -94,57 +88,17 @@ BTLE.reconS=async function(event){
     this.link=false;
   }
 }
-BTLE.setDout=async function(){
-  let scope=this;
-  let nchar=null;
-  console.log('Dout notification on');
-  try{
-    const characteristic=await this.service.getCharacteristic(this.charDoutUuid);
-    nchar=characteristic;
-    await nchar.startNotifications();
-    nchar.addEventListener('characteristicvaluechanged',function(event){
-      if(scope.queueDout>0) clearTimeout(scope.queueDout);
-      scope.bufDout.push(event.target.value.getUint8(0));
-      scope.queueDout=setTimeout(function(){
-        $('#output').append('Dout callback<br>');
-        scope.bufDout.forEach(function(elm){
-          $('#output').append(elm+'<br>');
-        });
-        scope.queueDout=0;
-      },300);
-    });
-  }
-  catch(error){
-    console.log('Argh! '+error);
-//  if(nchar!=null){
-//    nchar.addEventListener('characteristicvaluechanged',notiDout);
-//  }
-  }
-}
 BTLE.setWout=async function(service){
-  let scope=this;
-  let nchar=null;
   console.log('Wout notification on '+service.hasOwnProperty('getCharacteristic'));
+  let characteristic;
   try{
-    const characteristic=await service.getCharacteristic(this.charWoutUuid);
-    nchar=characteristic;
-    await nchar.startNotifications();
-    this.emit('notif_w');
-    nchar.addEventListener('characteristicvaluechanged',function(event){
-      if(scope.queueWout!=null) clearTimeout(scope.queueWout);
-      let value=event.target.value;
-      $('#output').append('Wout '+value.byteLength+' bytes received<br>');
-      let wav=[];
-      for(let i=0;i<value.byteLength;i+=2){
-        if(i/2<4) wav.push(value.getUint16(i));
-        else wav.push(value.getInt16(i));
-      }
-      scope.bufWout.push(wav);
-      scope.queueWout=setTimeout(function(){
-        this.emit('wave',scope.bufWout);
-        scope.queueWout=null;
-        scope.bufWout=[];
-      },300);
+    characteristic=await service.getCharacteristic(this.charNotifUuid);
+    await characteristic.startNotifications();
+    this.emit('notif');
+    let who=this;
+    characteristic.addEventListener('characteristicvaluechanged',function(event){
+//      who.emit('receive',event.target.value.toString());
+      who.emit('receive',event.target.value);
     });
   }
   catch(error){
@@ -176,7 +130,7 @@ BTLE.writeAds=async function(val){
 BTLE.writeDin=async function(service,val){
   $('#output').append('Write Data char...'+this.service+'<br>');
   try{
-    const characteristic=await service.getCharacteristic(this.charDinUuid);
+    const characteristic=await service.getCharacteristic(this.charDataUuid);
     const data=new Uint8Array(1);
     data[0]=val;
     await characteristic.writeValue(data);
