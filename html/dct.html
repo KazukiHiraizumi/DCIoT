@@ -53,7 +53,7 @@
 </div>
 <br clear="all">
 <table id="ind" border>
-<tr><td><button id="connect">接続</button><th id="ind_dev">Device<th id="ind_srv">Server<th id="ind_svc">Service<th id="ind_adsok">Ads<th id="ind_datok">Dat<th id="ind_woutok">Wout<td><button id="upload">UP</button><td><button id="wave">WAVE</button>
+<tr><td><button id="connect">接続</button><th id="ind_dev">Device<th id="ind_srv">Server<th id="ind_svc">Service<th id="ind_adsok">Ads<th id="ind_woutok">Wout<td><button id="upload">UP</button><td><button id="wave">WAVE</button>
 </table>
 
 <table id="rom" border></table>
@@ -66,7 +66,6 @@
 import BTLE from "./btle.js";
 BTLE.serviceUuid='10014246-f5b0-e881-09ab-42000ba24f83';
 BTLE.charAdsUuid='20024246-f5b0-e881-09ab-42000ba24f83';
-BTLE.charDataUuid='20034246-f5b0-e881-09ab-42000ba24f83';
 BTLE.charNotifUuid='20054246-f5b0-e881-09ab-42000ba24f83';
 
 function isWebBluetoothEnabled(){
@@ -143,10 +142,11 @@ $(document).ready(function(){
 	});
 	$('#upload').click(function(event){
     writeQueue=[];
-		BTLE.writeAds(0xFA01);
+    if(BTLE.link) BTLE.write2(0xFA01);
+    else BTLE.ready();
 	});
 	$('#wave').click(function(event){
-		BTLE.writeAds(0xFC01);
+		if(BTLE.link) BTLE.write2(0xFC01);
 	});
 	$('#clrlog').click(function(event){
 		$('#output').empty();
@@ -211,24 +211,37 @@ $(document).ready(function(){
 		tg.css({'color':'red'});
     colormarker=tg.css('color');
   });
-  $('#write').click(function(event){
+  function checkQueue(){
+    let queue=[];
     $('#rom input').each(function(i,e){
       if($(e).css('color')==colormarker){
     		let v=$(e).val();
     		if(v>255) $(e).val(v=255);
     		else if(v<0) $(e).val(v=0);
         let rq={'address':i,'value':v};
-        writeQueue.push(rq);
+        queue.push(rq);
       }
     });
+    return queue;
+  }
+  $('#write').click(function(event){
+    writeQueue=checkQueue();
     if(writeQueue.length>0){
-      let q=writeQueue.shift();
-      BTLE.writeDat(q.address,q.value);
+      if(BTLE.link){
+        let q=writeQueue.shift();
+        BTLE.write3(0xA000|q.address,q.value);
+      }
+      else BTLE.ready();
     }
   });
 
   BTLE.on('ready',function(){
     console.log('BLE ready');
+    if(writeQueue.length==0) BTLE.write2(0xFA01); //parameter send req
+    else{
+        let q=writeQueue.shift();
+        BTLE.write3(0xA000|q.address,q.value);
+    }
   });
   BTLE.on('disconnect',function(){
     resetInd();
@@ -252,15 +265,13 @@ $(document).ready(function(){
   BTLE.on('adsok',function(){
     $('#ind_adsok').css({'background':'cyan'});
   });
-  BTLE.on('datok',function(){
-    $('#ind_datok').css({'background':'cyan'});
-  });
   BTLE.timeout=null;
   BTLE.on('receive',function(data){
     let des=data.getUint16(0);
+    let det=des&0xF000;
 //    console.log('data.length='+data.byteLength+' [0]'+des);
     if(this.timeout!=null) clearTimeout(this.timeout);
-    if(des<0x1000){
+    if(det==0){
       if(des==0){ WavX=[]; WavY1=[]; WavY2=[]; WavY3=[]; }
       WavX.push(des);
 //    WavX.push(data.getUint16(2));
@@ -273,7 +284,7 @@ $(document).ready(function(){
         who.timeout=null;
       },300);
     }
-    else if((des&0xF000)==0xB000){  //Param read (max.8 bytes)
+    else if(det==0xB000){  //Param read (max.8 bytes)
       let key=des&0xFFF;
       let len=data.byteLength;
       for(let i=2;i<len;i++,key++){
@@ -287,12 +298,15 @@ $(document).ready(function(){
         else if(valn==valo) tg.css({'color':''});
 			}
     }
-    else if((des&0xF000)==0xA000){  //staging
+    else if(det==0xA000){
+      let key=des&0xFFF;
+      if(key!=0xFFF){
+        $('#rom input').eq(key).css({'color':''});
+      }
       if(writeQueue.length>0){
         let q=writeQueue.shift();
-        BTLE.writeDat(q.address,q.value);
+        BTLE.write3(0xA000|q.address,q.value);
       }
-      else BTLE.writeAds(0xFA11);
     }
   });
 });

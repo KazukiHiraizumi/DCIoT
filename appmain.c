@@ -16,8 +16,6 @@
 #define IdCommon  "f5b0e88109ab42000ba24f83"
 #define IdServicePri "10014246"
 #define IdCharADS "20024246"
-#define IdCharDIN "20034246"
-#define IdCharDOUT "20044246"
 #define IdCharWOUT "20054246"
 #define Prompt "CMD>"
 
@@ -105,6 +103,16 @@ int rn487x_reset(int adv){
     else return -1;
 }
 int rn487x_reboot(){ return rn487x_reset(0);}
+
+static void power_on(){
+    if(Timer[3]==0){
+        LATBbits.LB4=1;
+        LATBbits.LB5=1;
+        TRISBbits.RB4=0;
+        TRISBbits.RB5=0;
+        xdelay(100);
+    }
+}
 void setup(){
     int i,j,k;
     OSC_init(_XTAL_FREQ);
@@ -147,8 +155,7 @@ Reset:
     VSO_puts("//deviceID/");VSO_puts(deviceID);VSO_cr();
 //Private service
     rn487x_prog("PS,"IdServicePri""IdCommon"\n");
-    rn487x_prog("PC,"IdCharADS""IdCommon",08,02\n");
-    rn487x_prog("PC,"IdCharDIN""IdCommon",18,02\n");
+    rn487x_prog("PC,"IdCharADS""IdCommon",08,03\n");
     rn487x_prog("PC,"IdCharWOUT""IdCommon",12,0A\n");
     rn487x_prog("LS\n");
     USART_shrink();
@@ -239,18 +246,11 @@ CONNECT_LOOP:
             ModQ=102;
             break;
         case 0x12:  //write response
-            if(r2buf[8]){
-                XSART_putSHW(CH_WOUT);
-                XSART_putInt16(0xB000|CT_buf[CT_wreg1++]);
-                XSART_putInt8(CT_buf[CT_wreg1++]);
-                USART_cr();
-                USART_purge(Prompt);
-                if(CT_wreg1<CT_wreg2){
-                    USART2_cmd(0x11,CT_buf+CT_wreg1,2);
-                }
-                else CT_wreg1=CT_wreg2=0;
-            }
-            else CT_wreg1=CT_wreg2=0;
+            XSART_putSHW(CH_WOUT);
+            if(r2buf[8]) XSART_putInt16(0xA000|r2buf[7]);
+            else XSART_putInt16(0xAFFF);
+            USART_cr();
+            USART_purge(Prompt);
             break;
         case 0x22:  //wave data
             ModQ=202;
@@ -399,6 +399,7 @@ void WV_do(char *rs){
     int a,b,i;
     unsigned int han;
     unsigned long dat;
+//    VSO_puts("WV:");VSO_puts(rs);VSO_cr();
     XSART_parse(rs,&han,&dat);//chara handle
     switch(han){
     case CH_ADS:
@@ -408,37 +409,18 @@ void WV_do(char *rs){
         }
         else if(dat==0xFA01){//Request to send ROM data
             unsigned char dat=0;
-            LATBbits.LB4=1;
-            LATBbits.LB5=1;
-            TRISBbits.RB4=0;
-            TRISBbits.RB5=0;
-            xdelay(100);
+            power_on();
+            Timer[3]=10;//Power-off timer
             USART2_cmd(1,&dat,1);
-            Timer[3]=30;//Power-off timer
         }
-        else if(dat==0xFA11){//write request
-            VSO_putd(CT_wque/2);VSO_cr();
-            if(Timer[3]==0){
-                LATBbits.LB4=1;
-                LATBbits.LB5=1;
-                TRISBbits.RB4=0;
-                TRISBbits.RB5=0;
-                xdelay(100);
-            }
-            Timer[3]=30;
-            CT_wreg2=CT_wque;
-            CT_wque=CT_wreg1=0;
-            USART2_cmd(0x11,CT_buf,2);
+        else if((dat&0xF00000)==0xA00000){
+            unsigned char buf[2];
+            buf[1]=dat&0xFF;
+            buf[0]=(dat>>8)&0xFF;
+            power_on();
+            Timer[3]=5;
+            USART2_cmd(0x11,buf,2);
         }
-        break;
-    case CH_DIN:
-        __verbose=0;
-        CT_rev=CT_wreg1=CT_wreg2=0;
-        CT_buf[CT_wque++]=dat&0xff;  //address
-        CT_buf[CT_wque++]=dat>>8; //value
-        XSART_putSHW(CH_WOUT);XSART_putInt16(0xA000|(dat&0xff));USART_cr();
-        USART_purge(Prompt);
-        __verbose=1;
         break;
     }
 }
@@ -447,16 +429,12 @@ void WC_do(char *rs){
     unsigned long dat;
     XSART_parse(rs,&han,&dat);//chara handle
     VSO_puts("WC=");VSO_putx(han);VSO_cr();
-    if(han==CH_WOUT+1){
+/*    if(han==CH_WOUT+1){
         unsigned char cmd=0;
-        LATBbits.LB4=1;
-        LATBbits.LB5=1;
-        TRISBbits.RB4=0;
-        TRISBbits.RB5=0;
-        xdelay(100);
-        USART2_cmd(1,&cmd,1);
+        power_on();
         Timer[3]=10;//Power-off timer
-    }
+        USART2_cmd(1,&cmd,1);
+    }*/
 }
 void CONN_do(char *rs){
     unsigned int han;
@@ -464,7 +442,7 @@ void CONN_do(char *rs){
     unsigned char cmd=0;
     XSART_parse(rs,&han,&dat);
     VSO_puts("CONN=");VSO_putx(han);VSO_puts(",");VSO_putlx(dat);VSO_cr();
-//    rn487x_prog("LB\n");
+//    rn487x_prog("B\n");
 }
 
 //Comm libs b.w. RN487x

@@ -56,7 +56,6 @@ BTLE.getS=async function(event){
     const service=await server.getPrimaryService(this.serviceUuid);
     this.emit('service');
     await this.setAds(service);
-    await this.setDat(service);
     await this.setWout(service);
     this.link=true;
     this.emit(event);
@@ -77,7 +76,6 @@ BTLE.reconS=async function(event){
     const service=await server.getPrimaryService(this.serviceUuid);
     this.emit('service');
     await this.setAds(service);
-    await this.setDat(service);
     await this.setWout(service);
     this.link=true;
     this.emit(event);
@@ -104,38 +102,30 @@ BTLE.setAds=async function(service){
   this.charAds=await service.getCharacteristic(this.charAdsUuid);
   this.emit('adsok');
 }
-BTLE.setDat=async function(service){
-  this.charDat=await service.getCharacteristic(this.charDataUuid);
-  await this.charDat.startNotifications();
-  this.emit('datok');
-/*  let who=this;
-  this.charDat.addEventListener('characteristicvaluechanged',function(event){
-    who.emit('written',event.target.value);
-  });*/
-}
-BTLE.writeAds=async function(val){
+BTLE.write2=async function(cmd){
   try{
     let data=new Uint8Array(2);
-    data[0]=val>>8;
-    data[1]=val;
+    data[0]=cmd>>8;
+    data[1]=cmd;
     await this.charAds.writeValue(data);
   }
   catch(error){
-    console.log('writeAds error:'+error);
+    console.log('write2 error:'+error);
     this.emit('error',error);
     this.discon();
     this.device=null;
   }
 }
-BTLE.writeDat=async function(adds,val){
+BTLE.write3=async function(cmd,val){
   try{
-    let data=new Uint8Array(2);
-    data[0]=val;
-    data[1]=adds;
-    await this.charDat.writeValue(data);
+    let data=new Uint8Array(3);
+    data[0]=cmd>>8;
+    data[1]=cmd;
+    data[2]=val;
+    await this.charAds.writeValue(data);
   }
   catch(error){
-    console.log('writeDat error:'+error);
+    console.log('write3 error:'+error);
     this.emit('error',error);
     this.discon();
     this.device=null;

@@ -19,8 +19,7 @@ extern void XSART_putInt16(int);
 
 //Characteristic Handles
 #define CH_ADS 0x0072
-#define CH_DIN 0x0074
-#define CH_WOUT 0x0077
+#define CH_WOUT 0x0074
 //IOs
 //#define DI_RESET    PORTCbits.RC2
 #define DO_RESET    LATCbits.LC2
