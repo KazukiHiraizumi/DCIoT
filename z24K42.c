@@ -363,18 +363,17 @@ void USART2_putc(unsigned char c){
     USART2_sum+=c;
     TXREG2 = c;
 }
-void USART2_cmd(int cmd,int dat){
+void USART2_cmd(int cmd,unsigned char *dat,int n){
     unsigned int sum;
-    VSO_puts("cmd:");VSO_putd(cmd);VSO_cr();
     USART2_sum=0;
     USART2_putc(2);//STX
     USART2_putc(0);//Timestamp
     USART2_putc(0);
     USART2_putc(0);
     USART2_putc(0);
-    USART2_putc(2);//Length
+    USART2_putc(n+1);//Length
     USART2_putc(cmd);
-    USART2_putc(dat);
+    for(;n>0;n--,dat++) USART2_putc(*dat);
     USART2_putc(sum=(-USART2_sum)&0xFF);
 }
 int USART2_getc(){

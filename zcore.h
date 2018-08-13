@@ -86,7 +86,7 @@ extern void E2ROM_write(int adds,int val);
 
 extern void USART2_init(unsigned long bps);
 extern int USART2_gets(unsigned char *dat);//returns cmd
-extern void USART2_cmd(int cmd,int dat);
+extern void USART2_cmd(int cmd,unsigned char *dat,int length);
 extern void USART2_putc(unsigned char c);
 
 #ifdef	__cplusplus

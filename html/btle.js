@@ -55,13 +55,15 @@ BTLE.getS=async function(event){
     this.emit('server');
     const service=await server.getPrimaryService(this.serviceUuid);
     this.emit('service');
-    await this.setWout(service);
     await this.setAds(service);
+    await this.setDat(service);
+    await this.setWout(service);
     this.link=true;
     this.emit(event);
   }
   catch(error){
     this.emit('error',error);
+    this.discon();
     this.device=null;
     this.link=false;
     console.log('Argh! '+error);
@@ -74,46 +76,42 @@ BTLE.reconS=async function(event){
     this.emit('server');
     const service=await server.getPrimaryService(this.serviceUuid);
     this.emit('service');
-    await this.setWout(service);
     await this.setAds(service);
+    await this.setDat(service);
+    await this.setWout(service);
     this.link=true;
     this.emit(event);
-//    this.writeAds(0xFC01);//request to send data
   }
   catch(error){
     console.log('Argh! '+error);
     this.emit('error',error);
+    this.discon();
     this.device=null;
     this.link=false;
   }
 }
 BTLE.setWout=async function(service){
   console.log('Wout notification on '+service.hasOwnProperty('getCharacteristic'));
-  let characteristic;
-  try{
-    characteristic=await service.getCharacteristic(this.charNotifUuid);
-    await characteristic.startNotifications();
-    this.emit('notif');
-    let who=this;
-    characteristic.addEventListener('characteristicvaluechanged',function(event){
-//      who.emit('receive',event.target.value.toString());
-      who.emit('receive',event.target.value);
-    });
-  }
-  catch(error){
-    console.log('Argh! '+error);
-//    if(nchar!=null){
-//    nchar.addEventListener('characteristicvaluechanged',notifCB);
-//  }
-	}
+  let characteristic=await service.getCharacteristic(this.charNotifUuid);
+  await characteristic.startNotifications();
+  this.emit('woutok');
+  let who=this;
+  characteristic.addEventListener('characteristicvaluechanged',function(event){
+    who.emit('receive',event.target.value);
+  });
 }
 BTLE.setAds=async function(service){
-  try{
-    this.charAds=await service.getCharacteristic(this.charAdsUuid);
-  }
-  catch(error){
-    $('#output').append('Argh! '+error+'<br>');
-  }
+  this.charAds=await service.getCharacteristic(this.charAdsUuid);
+  this.emit('adsok');
+}
+BTLE.setDat=async function(service){
+  this.charDat=await service.getCharacteristic(this.charDataUuid);
+  await this.charDat.startNotifications();
+  this.emit('datok');
+/*  let who=this;
+  this.charDat.addEventListener('characteristicvaluechanged',function(event){
+    who.emit('written',event.target.value);
+  });*/
 }
 BTLE.writeAds=async function(val){
   try{
@@ -123,19 +121,24 @@ BTLE.writeAds=async function(val){
     await this.charAds.writeValue(data);
   }
   catch(error){
-    $('#output').append('Argh! '+error+'<br>');
+    console.log('writeAds error:'+error);
+    this.emit('error',error);
+    this.discon();
+    this.device=null;
   }
 }
-BTLE.writeDin=async function(service,val){
-  $('#output').append('Write Data char...'+this.service+'<br>');
+BTLE.writeDat=async function(adds,val){
   try{
-    const characteristic=await service.getCharacteristic(this.charDataUuid);
-    const data=new Uint8Array(1);
+    let data=new Uint8Array(2);
     data[0]=val;
-    await characteristic.writeValue(data);
+    data[1]=adds;
+    await this.charDat.writeValue(data);
   }
   catch(error){
-    $('#output').append('Argh! '+error+'<br>');
+    console.log('writeDat error:'+error);
+    this.emit('error',error);
+    this.discon();
+    this.device=null;
   }
 }
 
