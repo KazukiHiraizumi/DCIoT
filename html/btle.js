@@ -25,12 +25,12 @@ BTLE.discon=function(){
     this.link=false;
   }
 }
-BTLE.ready=function(event){
+BTLE.ready=function(){
   if(this.link){
-    this.emit(event);
+    this.emit('ready');
     return;
   }
-  else this.getS(event);
+  else this.getS('ready');
 }
 BTLE.getS=async function(event){
   if(this.device!=null){
@@ -59,7 +59,6 @@ BTLE.getS=async function(event){
     await this.setAds(service);
     this.link=true;
     this.emit(event);
-//  this.writeAds(0xFC01);//request to send data
   }
   catch(error){
     this.emit('error',error);

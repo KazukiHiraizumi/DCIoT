@@ -365,7 +365,7 @@ void USART2_putc(unsigned char c){
 }
 void USART2_cmd(int cmd,int dat){
     unsigned int sum;
-    VSO_puts("cmd:");VSO_putd(cmd);VSO_puts(",");
+    VSO_puts("cmd:");VSO_putd(cmd);VSO_cr();
     USART2_sum=0;
     USART2_putc(2);//STX
     USART2_putc(0);//Timestamp
@@ -376,7 +376,6 @@ void USART2_cmd(int cmd,int dat){
     USART2_putc(cmd);
     USART2_putc(dat);
     USART2_putc(sum=(-USART2_sum)&0xFF);
-    VSO_putd(sum);VSO_cr();
 }
 int USART2_getc(){
     if(USART2_rbufw!=USART2_rbufr){

@@ -34,7 +34,7 @@ static unsigned char ModQ; //0:discon,1:adv,2:connect
 //diag
 static unsigned short Timer[]={0,0,0,0,0};//wallet scan,adv off,discon,battery
 //Castum
-unsigned short CT_adds;
+unsigned short CT_adds,CT_reg1,CT_reg2;
 unsigned short CT_rev=0;
 unsigned short CT_pwm;
 unsigned long CT_dt,CT_time;
@@ -229,7 +229,6 @@ CONNECT_LOOP:
     }
     if((r2len=USART2_gets(r2buf))>0){
         int cmd=r2buf[6];
-        VSO_puts("CT:");VSO_putd(cmd);VSO_cr();
         switch(cmd){
         case 0x01:  //echo back
             VSO_puts("CMD01\n");
@@ -295,21 +294,38 @@ WAVREC_LOOP:
         goto CONNECT;
     }
 REGDUMP:
-    VSO_puts("//Register dump\n");
+    CT_reg1=4095;//address limit
+    CT_rev=0;//no wave data
 REGDUMP_LOOP:
-    VSO_putd(r2buf[7]);VSO_puts(",");VSO_putd(r2buf[8]);VSO_cr();
+    switch(r2buf[6]){
+    case 0x02:
+        CT_reg2=r2buf[7];
+        if(CT_reg1>CT_reg2) CT_reg1=CT_reg2;
+        CT_buf[CT_reg2]=r2buf[8];
+        break;
+    case 0x03:
+        VSO_puts("REGDUMP ");VSO_putd(CT_reg1);VSO_puts(":");VSO_putd(CT_reg2);VSO_cr();
+        goto REGDUMP_EXIT;
+    }
     TMR1_set(200);
     while(!TMR1_up){
-        if((r2len=USART2_gets(r2buf))>0){
-            switch(r2buf[6]){
-            case 0x02:
-                goto REGDUMP_LOOP;
-            case 0x03:
-                goto REGDUMP_EXIT;
-            }
-        }
+        if((r2len=USART2_gets(r2buf))>0) goto REGDUMP_LOOP;
     }
 REGDUMP_EXIT:
+    {
+        unsigned short n=0xB000;
+        for(;CT_reg1<=CT_reg2;){
+            XSART_putSHW(CH_WOUT);
+            XSART_putInt16(n|CT_reg1);
+            int i=0;
+            for(;i<8 && CT_reg1<=CT_reg2;i++,CT_reg1++){
+                XSART_putInt8(CT_buf[CT_reg1]);
+            }
+            USART_cr();
+            USART_purge(Prompt);
+        }
+    }
+REGDUMP_ERROR:
     ModQ=2;
     goto CONNECT;
 }
@@ -384,15 +400,9 @@ void WV_do(char *rs){
             LATBbits.LB5=1;
             TRISBbits.RB4=0;
             TRISBbits.RB5=0;
-            xdelay(1000);
+            xdelay(100);
             USART2_cmd(1,0);
             Timer[3]=30;//Power-off timer
-            {
-                unsigned short n=0xB000;
-                unsigned short t=0x1234;
-                XSART_putSHW(CH_WOUT);XSART_putInt16(n);XSART_putInt16(t);USART_cr();
-                USART_purge(Prompt);
-            }
         }
         else if(dat<0x1000){
             CT_adds=dat;

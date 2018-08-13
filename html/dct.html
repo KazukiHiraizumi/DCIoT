@@ -53,8 +53,10 @@
 </div>
 <br clear="all">
 <table id="ind" border>
-<tr><td><button id="connect">接続</button><th id="ind_dev">Device<th id="ind_srv">Server<th id="ind_svc">Service<th id="ind_notif">Notify<td><button id="upload">UP</button>
+<tr><td><button id="connect">接続</button><th id="ind_dev">Device<th id="ind_srv">Server<th id="ind_svc">Service<th id="ind_notif">Notify<td><button id="upload">UP</button><td><button id="wave">WAVE</button>
 </table>
+
+<table id="rom" border></table>
 
 <h3>Debugging</h3>
 <div id="output"></div>
@@ -80,6 +82,8 @@ function isWebBluetoothEnabled(){
 function resetInd(){
   $('#ind th').css({'background':'grey'});
 }
+
+let Param=[]
 
 let canvas,context;
 let BrkX=[0,10,20,50,100,200,500,800];
@@ -116,15 +120,31 @@ $(document).ready(function(){
   canvas.height=$('#plot').height();
   drawAll();
 
+	const column=8;
+	let tbl='';
+	for(let i=0;i<112/column;i++){
+		let row=column*i;
+		tbl+='<tr><td align="right">'+row+'</td>';
+		for(let j=0;j<column;j++){
+			let idx=row+j;
+			tbl+='<td><input type="text" style="width:100%;" maxlength="3"></input></td>';
+		}
+		tbl+='</tr>';
+	}
+	$('#rom').append(tbl);
+
 	$('#connect').click(function(event){
 		if(isWebBluetoothEnabled()) {
-			BTLE.ready('ready');
+			BTLE.ready();
 		}
 	});
 	$('#discon').click(function(event){
 		BTLE.discon();
 	});
 	$('#upload').click(function(event){
+		BTLE.writeAds(0xFA01);
+	});
+	$('#wave').click(function(event){
 		BTLE.writeAds(0xFC01);
 	});
 	$('#clrlog').click(function(event){
@@ -183,7 +203,6 @@ $(document).ready(function(){
 
   BTLE.on('ready',function(){
     console.log('BLE ready');
-    BTLE.writeAds(0xFA01); //ROM dump
   });
   BTLE.on('disconnect',function(){
     resetInd();
@@ -225,6 +244,12 @@ $(document).ready(function(){
     else if((des&0xF000)==0xA000){  //Address verify
     }
     else if((des&0xF000)==0xB000){  //Param read (max.8 bytes)
+      let key=des&0xFFF;
+      let len=data.byteLength;
+      for(let i=2;i<len;i++,key++){
+        let val=data.getUint8(i);
+				$('#rom input').eq(key).val(val);
+			}
     }
   });
 });
