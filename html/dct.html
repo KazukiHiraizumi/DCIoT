@@ -9,9 +9,9 @@
 <title>Web Bluetooth</title>
 <style type="text/css">
 #ind button{
-	width:100%;
 	height:40px;
-  font-size:0.8em;
+  width:100px;
+  font-size:1.0em;
 }
 #ind th{
 	height:40px;
@@ -20,10 +20,10 @@
 #control button{
 	width:100%;
 	height:50px;
-  font-size:1.5em;
+  font-size:1.0em;
 }
 #control td{
-	width:20%;
+	width:100px;
 }
 #output{
   font-size:0.8em;
@@ -36,24 +36,22 @@
 </head>
 
 <body>
-<button id="discon">切断</button>
-<button id="clrlog">クリア</button><br clear="all">
+<button id="discon">切断</button><button id="set0">SET-0</button><br clear="all">
 <div style="width:100%;height:400px;background-color:ivory">
 <canvas id="plot" style="width:100%;height:100%;background-color:ivory" ></canvas>
 </div>
 <div>
-<table id="control" style="width:100%;">
-<tr><td rowspan="5"><button id="write">送信</button><td rowspan="5">
+<table id="control">
+<tr><td rowspan="4"><button id="write">送信</button><td rowspan="4"><button id="cancel">キャンセル</button><td rowspan="4">
 <tr><td><td rowspan="2"><button id="up">↑</button>
 <tr><td rowspan="2"><button id="left">←</button><td rowspan="2"><button id="right">→</button>
 <tr><td rowspan="2"><button id="down">↓</button>
-<tr><td><td>
 </table>
 </div>
 </div>
 <br clear="all">
 <table id="ind" border>
-<tr><td><button id="connect">接続</button><th id="ind_dev">Device<th id="ind_srv">Server<th id="ind_svc">Service<th id="ind_adsok">Ads<th id="ind_woutok">Wout<td><button id="upload">UP</button><td><button id="wave">WAVE</button>
+<tr><td><button id="connect">接続</button><th id="ind_dev">Device<th id="ind_srv">Server<th id="ind_svc">Service<th id="ind_adsok">Ads<th id="ind_woutok">Wout<td>&nbsp;&nbsp;<th id="ind_pup">P-UP<th id="ind_pdw">P-DW<th id="ind_wup">W-UP
 </table>
 
 <table id="rom" border></table>
@@ -62,6 +60,19 @@
 <div id="output"></div>
 
 <script type="module">
+//Defaut param//
+let Param=[
+  [90,7,50,50,100,20,200,0,0,30,150,30,150,0,255,0,
+  40,10,0,0,35,0,0,0,0,240,25,240,45,200,65,150,
+  98,102,142,89,200,40,255,40,0,50,100,100,200,200,255,255,
+  0,0,10,0,50,0,255,0,
+  0,30,20,242,10,255,255,255,120,133,5,2,0,255,128,255,
+  100,23,100,255,255,166,133,96,255,5,5,255,255,255,255,255,
+  255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+  255,0,1,255,255,255,255,255]
+];
+let ParamBuf=[];
+
 //BLE UUIDs///
 import BTLE from "./btle.js";
 BTLE.serviceUuid='10014246-f5b0-e881-09ab-42000ba24f83';
@@ -73,7 +84,7 @@ function isWebBluetoothEnabled(){
 		return true;
 	}
 	else{
-		$('#output').append('Web Bluetooth API is not available.\n' +'Please make sure the "Experimental Web Platform features" flag is enabled.');
+		console.log('Web Bluetooth API is not available.\n' +'Please make sure the "Experimental Web Platform features" flag is enabled.');
 		return false;
 	}
 }
@@ -85,8 +96,10 @@ function resetInd(){
 let writeQueue=[];
 
 let canvas,context;
-let BrkX=[0,10,20,50,100,200,500,800];
-let BrkY=[0,100,100,50,40,30,25,20];
+
+const BrkTbl=24;
+let BrkX=[];
+let BrkY=[];
 let BrkC=-1;
 let WavX=[];
 let WavY1=[];
@@ -96,16 +109,23 @@ let RangeX=[0,800];
 let RangeY1=[0,6*1000];
 let RangeY2=[-3*100,3*100];
 let RangeY3=[-3*1000,3*1000];
-let RangeB=[0,6*50];
+let RangeB=[0,6*100];
 
 function drawAll(){
   gridPlot(8,6);
 	graphPlot(WavX,WavY1,RangeX,RangeY1,'green');
   graphPlot(WavX,WavY2,RangeX,RangeY2,'red');
   graphPlot(WavX,WavY3,RangeX,RangeY3,'blue');
-  graphPlot(BrkX,BrkY,RangeX,RangeB,'blue');
-  circlePlot(BrkX[BrkC],BrkY[BrkC],RangeX,RangeB,'blue');
- textPlot(BrkX[BrkC],BrkY[BrkC],RangeX,RangeB,BrkX[BrkC]+','+BrkY[BrkC],'blue');
+  polyPlot(BrkX,BrkY,RangeX,RangeB,'blue');
+  circlePlot(BrkX[BrkC],BrkY[BrkC],RangeX,RangeB,6,'blue');
+  textPlot(BrkX[BrkC],BrkY[BrkC],RangeX,RangeB,BrkX[BrkC]+','+BrkY[BrkC],'blue');
+}
+function BrkReload(){
+  for(let i=0;i<8;i++){
+    let x=Number($('#rom input').eq(2*i+BrkTbl).val());
+    BrkY[i]=$('#rom input').eq(2*i+BrkTbl+1).val();
+    BrkX[i]=Math.floor(x+x*x/128);
+  }
 }
 
 $(document).ready(function(){
@@ -131,6 +151,7 @@ $(document).ready(function(){
 		tbl+='</tr>';
 	}
 	$('#rom').append(tbl);
+  let colorMark=$('#rom input').css('color');
 
 	$('#connect').click(function(event){
 		if(isWebBluetoothEnabled()) {
@@ -140,16 +161,13 @@ $(document).ready(function(){
 	$('#discon').click(function(event){
 		BTLE.discon();
 	});
-	$('#upload').click(function(event){
-    writeQueue=[];
-    if(BTLE.link) BTLE.write2(0xFA01);
-    else BTLE.ready();
-	});
-	$('#wave').click(function(event){
-		if(BTLE.link) BTLE.write2(0xFC01);
-	});
-	$('#clrlog').click(function(event){
-		$('#output').empty();
+	$('#set0').click(function(event){
+    let par=ParamBuf=Param[0].clone();
+    for(let i=0;i<par.length;i++){
+      let tg=$('#rom input').eq(i);
+      tg.val(par[i]);
+      tg.css({'color':'red'});
+    }
 	});
 	$('#plot').click(function(event){
     let x=event.pageX-$(event.target).offset().left;
@@ -168,8 +186,12 @@ $(document).ready(function(){
   $('#up').click(function(event){
     if(BrkC>=0){
       let y=Math.floor(BrkY[BrkC]*1.05);
+      if(y>255) y=255;
       if(BrkY[BrkC]<y) BrkY[BrkC]=y;
       else BrkY[BrkC]++;
+      let tg=$('#rom input').eq(2*BrkC+BrkTbl+1);
+      tg.val(BrkY[BrkC]);
+  		tg.css({'color':'red'});
       drawAll();
     }
   });
@@ -177,31 +199,39 @@ $(document).ready(function(){
     if(BrkC>=0){
       let y=Math.floor(BrkY[BrkC]*0.95);
       if(BrkY[BrkC]>y) BrkY[BrkC]=y;
-      else BrkY[BrkC]--;
+      else if(y>0) BrkY[BrkC]--;
+      let tg=$('#rom input').eq(2*BrkC+BrkTbl+1);
+      tg.val(BrkY[BrkC]);
+  		tg.css({'color':'red'});
       drawAll();
     }
   });
   $('#left').click(function(event){
-    if(BrkC>0 && BrkC<8){
+    if(BrkC>0 && BrkC<7){
       let x1=BrkX[BrkC]*0.95;
       let x2=Math.floor(-64+8*Math.sqrt(64+2*x1));
       let x3=Math.floor(x2*x2/128+x2);
       if(BrkX[BrkC]>x3) BrkX[BrkC]=x3;
       else BrkX[BrkC]--;
+      let tg=$('#rom input').eq(2*BrkC+BrkTbl);
+      tg.val(Math.floor(-64+8*Math.sqrt(64+2*BrkX[BrkC])))
+  		tg.css({'color':'red'});
       drawAll();
     }
   });
   $('#right').click(function(event){
-    if(BrkC>0 && BrkC<8){
+    if(BrkC>0 && BrkC<7){
       let x1=BrkX[BrkC]*1.05;
       let x2=Math.floor(-64+8*Math.sqrt(64+2*x1));
       let x3=Math.floor(x2*x2/128+x2);
       if(BrkX[BrkC]<x3) BrkX[BrkC]=x3;
       else BrkX[BrkC]++;
+      let tg=$('#rom input').eq(2*BrkC+BrkTbl);
+      tg.val(Math.floor(-64+8*Math.sqrt(64+2*BrkX[BrkC])))
+  		tg.css({'color':'red'});
       drawAll();
     }
   });
-  let colormarker;
 	$('#rom input').change(function(e){
 	  let en=$('#rom input').index(e.target);
 	  let tg=$(e.target);
@@ -209,12 +239,11 @@ $(document).ready(function(){
 		if(v>255) tg.val(v=255);
 		else if(v<0) tg.val(v=0);
 		tg.css({'color':'red'});
-    colormarker=tg.css('color');
   });
   function checkQueue(){
     let queue=[];
     $('#rom input').each(function(i,e){
-      if($(e).css('color')==colormarker){
+      if($(e).css('color')!=colorMark){
     		let v=$(e).val();
     		if(v>255) $(e).val(v=255);
     		else if(v<0) $(e).val(v=0);
@@ -230,18 +259,51 @@ $(document).ready(function(){
       if(BTLE.link){
         let q=writeQueue.shift();
         BTLE.write3(0xA000|q.address,q.value);
+        $('#ind_pdw').css({'background':'orange'});
       }
       else BTLE.ready();
     }
   });
+  $('#cancel').click(function(event){
+    for(let i=0;i<ParamBuf.length;i++){
+  	  let tg=$('#rom input').eq(i);
+      tg.val(ParamBuf[i]);
+      tg.css({'color':''});
+    }
+    BrkReload();
+    drawAll();
+  });
 
   BTLE.on('ready',function(){
     console.log('BLE ready');
-    if(writeQueue.length==0) BTLE.write2(0xFA01); //parameter send req
-    else{
+    this.write2(0xFC01);//wave upload req
+    $('#ind_wup').css({'background':'orange'});
+    const who=this;
+    this.on('wdone',function(){
+      $('#ind_wup').css({'background':'grey'});
+      console.log('Wave received, try upload or write parameter');
+      writeQueue=checkQueue();
+      if(writeQueue.length==0){
+        who.write2(0xFA01); //parameter upload req
+        $('#ind_pup').css({'background':'orange'});
+        who.timeout=setTimeout(function(){
+          $('#ind_pup').css({'background':'grey'});
+        },500);
+      }
+      else{
         let q=writeQueue.shift();
-        BTLE.write3(0xA000|q.address,q.value);
-    }
+        who.write3(0xA000|q.address,q.value);
+        $('#ind_pdw').css({'background':'orange'});
+        who.timeout=setTimeout(function(){
+          $('#ind_pdw').css({'background':'grey'});
+        },500);
+      }
+      who.off('wdone');
+    });
+    this.timeout=setTimeout(function(){
+      console.log('No wave received');
+      who.emit('wdone');
+    },500);
   });
   BTLE.on('disconnect',function(){
     resetInd();
@@ -266,20 +328,27 @@ $(document).ready(function(){
     $('#ind_adsok').css({'background':'cyan'});
   });
   BTLE.timeout=null;
+  BTLE.wrevs=1000;
   BTLE.on('receive',function(data){
     let des=data.getUint16(0);
     let det=des&0xF000;
 //    console.log('data.length='+data.byteLength+' [0]'+des);
     if(this.timeout!=null) clearTimeout(this.timeout);
     if(det==0){
-      if(des==0){ WavX=[]; WavY1=[]; WavY2=[]; WavY3=[]; }
-      WavX.push(des);
+      if(this.wrevs>des){
+        WavX=[]; WavY1=[]; WavY2=[]; WavY3=[];
+        $('#ind_wup').css({'background':'orange'});
+    }
+      WavX.push(this.wrevs=des);
 //    WavX.push(data.getUint16(2));
       WavY1.push(Math.PI*2e6/data.getUint16(4));
       WavY2.push(data.getUint16(6));
       WavY3.push(data.getInt16(8));
       let who=this;
       this.timeout=setTimeout(function(){
+        console.log('wave received '+WavX.length);
+        $('#ind_wup').css({'background':'grey'});
+        who.emit('wdone');
         drawAll();
         who.timeout=null;
       },300);
@@ -289,24 +358,33 @@ $(document).ready(function(){
       let len=data.byteLength;
       for(let i=2;i<len;i++,key++){
         let tg=$('#rom input').eq(key);
-        let valn=data.getUint8(i);
-        let valo=tg.val();
-        if(writeQueue.length==0){
-          tg.val(valn);
-      		tg.css({'color':''});
-        }
-        else if(valn==valo) tg.css({'color':''});
+        let val=data.getUint8(i);
+        tg.val(val);
+      	tg.css({'color':''});
+        ParamBuf[key]=val;
 			}
+      let who=this;
+      this.timeout=setTimeout(function(){
+        console.log('parameter received');
+        BrkReload();
+        $('#ind_pup').css({'background':'grey'});
+        drawAll();
+        who.timeout=null;
+      },300);
     }
     else if(det==0xA000){
       let key=des&0xFFF;
+      console.log('write verify:'+key);
       if(key!=0xFFF){
-        $('#rom input').eq(key).css({'color':''});
+        let tg=$('#rom input').eq(key);
+        tg.css({'color':''});
+        ParamBuf[key]=tg.val();
       }
       if(writeQueue.length>0){
         let q=writeQueue.shift();
         BTLE.write3(0xA000|q.address,q.value);
       }
+      else $('#ind_pdw').css({'background':'grey'});
     }
   });
 });
@@ -345,11 +423,25 @@ const graphPlot=function(xw,yw,xr,yr,col){
 	}
 	context.stroke();
 }
-const circlePlot=function(xw,yw,xr,yr,col){
+const polyPlot=function(xw,yw,xr,yr,col){
+	context.lineWidth=1.0;
+	context.strokeStyle=col;
+	context.beginPath();
+	for(var i=0;i<xw.length;i++){
+    let p=coordPlot(xw[i],yw[i],xr,yr);
+		if(i==0) context.moveTo(p.x,p.y);
+		else context.lineTo(p.x,p.y);
+	}
+	context.stroke();
+	for(var i=0;i<xw.length;i++){
+    circlePlot(xw[i],yw[i],xr,yr,3,col);
+	}
+}
+const circlePlot=function(xw,yw,xr,yr,rad,col){
 	context.fillStyle=col;
 	context.beginPath();
   let p=coordPlot(xw,yw,xr,yr);
-  context.arc(p.x,p.y,8,0,2*Math.PI,true);
+  context.arc(p.x,p.y,rad,0,2*Math.PI,true);
   context.fill();
 	context.stroke();
 }

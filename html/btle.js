@@ -26,11 +26,7 @@ BTLE.discon=function(){
   }
 }
 BTLE.ready=function(){
-  if(this.link){
-    this.emit('ready');
-    return;
-  }
-  else this.getS('ready');
+  if(!this.link) this.getS('ready');
 }
 BTLE.getS=async function(event){
   if(this.device!=null){
@@ -58,7 +54,9 @@ BTLE.getS=async function(event){
     await this.setAds(service);
     await this.setWout(service);
     this.link=true;
-    this.emit(event);
+    setTimeout(function(){
+      who.emit(event);
+   },500);
   }
   catch(error){
     this.emit('error',error);
@@ -78,7 +76,10 @@ BTLE.reconS=async function(event){
     await this.setAds(service);
     await this.setWout(service);
     this.link=true;
-    this.emit(event);
+    const who=this;
+    setTimeout(function(){
+      who.emit(event);
+   },500);
   }
   catch(error){
     console.log('Argh! '+error);
