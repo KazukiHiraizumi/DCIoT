@@ -15,15 +15,19 @@
 }
 #ind th{
 	height:40px;
+  width:5%;
   font-size:0.8em;
 }
-#control button{
-	width:100%;
-	height:50px;
-  font-size:1.0em;
+#ind td{
+	height:40px;
+  width:5%;
+  font-size:0.8em;
+  background-color:white;
 }
-#control td{
-	width:100px;
+#control button{
+	height:50px;
+	width:100%;
+  font-size:1.0em;
 }
 #output{
   font-size:0.8em;
@@ -36,22 +40,43 @@
 </head>
 
 <body>
-<button id="discon">切断</button><button id="set0">SET-0</button><br clear="all">
-<div style="width:100%;height:400px;background-color:ivory">
+<button id="discon">切断</button>
+<button class="setbrk">SET-0</button><button class="setbrk">SET-1</button><br clear="all">
+
+<div style="width:100%;background-color:ivory">
 <canvas id="plot" style="width:100%;height:100%;background-color:ivory" ></canvas>
 </div>
 <div>
-<table id="control">
-<tr><td rowspan="4"><button id="write">送信</button><td rowspan="4"><button id="cancel">キャンセル</button><td rowspan="4">
-<tr><td><td rowspan="2"><button id="up">↑</button>
-<tr><td rowspan="2"><button id="left">←</button><td rowspan="2"><button id="right">→</button>
-<tr><td rowspan="2"><button id="down">↓</button>
+<table id="control" width="100%">
+<tr><td style="width:50%;">
+<table style="width:100%;">
+<tr><td style="width:50%;"><button id="write">送信</button>
+<td style="width:50%;"><button id="cancel">キャンセル</button>
+<td rowspan="2">&nbsp;
+<tr><td colspan="2">
+<input type="radio" name="mode" checked id="mode_easy">Easy<br>
+<input type="radio" name="mode" id="mode_detail">Detail<br>
+</table>
+<td style="width:50%;">
+<div id="show_easy" style="display:block;">
+<table style="width:100%;">
+<tr><td style="width:50%;"><button id="up1">↑</button><td style="width:50%;"><button id="up2">↑</button>
+<tr><td style="width:50%;"><button id="down1">↓</button><td style="width:50%;"><button id="down2">↓</button>
+</table>
+</div>
+<div id="show_detail" style="display:none;">
+<table style="width:100%;">
+<tr><td style="width:33%;"><td rowspan="2" style="width:33%;"><button id="up">↑</button>
+<tr><td rowspan="2" style="width:33%;"><button id="left">←</button><td rowspan="2" style="width:33%;"><button id="right">→</button>
+<tr><td rowspan="2" style="width:33%;"><button id="down">↓</button>
+</table>
+</div>
 </table>
 </div>
 </div>
 <br clear="all">
 <table id="ind" border>
-<tr><td><button id="connect">接続</button><th id="ind_dev">Device<th id="ind_srv">Server<th id="ind_svc">Service<th id="ind_adsok">Ads<th id="ind_woutok">Wout<td>&nbsp;&nbsp;<th id="ind_pup">P-UP<th id="ind_pdw">P-DW<th id="ind_wup">W-UP
+<tr><td><button id="connect">接続</button><th id="ind_dev">1<th id="ind_srv">2<th id="ind_svc">3<th id="ind_adsok">4<th id="ind_woutok">5<td>&nbsp;<th id="ind_pup">1<th id="ind_pdw">2<th id="ind_wup">3
 </table>
 
 <table id="rom" border></table>
@@ -62,13 +87,33 @@
 <script type="module">
 //Defaut param//
 let Param=[
-  [90,7,50,50,100,20,200,0,0,30,150,30,150,0,255,0,
-  40,10,0,0,35,0,0,0,0,240,25,240,45,200,65,150,
-  98,102,142,89,200,40,255,40,0,50,100,100,200,200,255,255,
+  [90,7,50,50,100,20,200,50,
+  0,10,50,10,150,10,255,10,
+  25,25,0,0,35,0,0,0,
+  0,240,25,240,45,200,65,150,
+  98,102,142,89,200,40,255,40,
+  0,50,100,100,200,200,255,255,
   0,0,10,0,50,0,255,0,
-  0,30,20,242,10,255,255,255,120,133,5,2,0,255,128,255,
-  100,23,100,255,255,166,133,96,255,5,5,255,255,255,255,255,
-  255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+  0,30,20,242,10,255,255,255,
+  120,133,5,2,0,255,128,255,
+  100,23,100,255,255,166,133,96,
+  255,5,5,255,255,255,255,255,
+  255,255,255,255,255,255,255,255,
+  255,255,255,255,255,255,255,255,
+  255,0,1,255,255,255,255,255],
+  [90,7,50,50,100,20,200,10,
+  0,50,20,50,30,20,255,10,
+  25,25,0,0,100,0,0,0,
+  0,240,25,240,72,171,107,122,
+  136,114,182,67,221,39,255,40,
+  0,100,150,255,255,255,255,255,
+  0,70,35,70,70,170,255,170,
+  0,30,20,242,10,255,255,255,
+  120,133,5,2,0,255,128,255,
+  100,23,100,255,255,166,133,96,
+  255,5,5,255,255,255,255,255,
+  255,255,255,255,255,255,255,255,
+  255,255,255,255,255,255,255,255,
   255,0,1,255,255,255,255,255]
 ];
 let ParamBuf=[];
@@ -92,8 +137,14 @@ function isWebBluetoothEnabled(){
 function resetInd(){
   $('#ind th').css({'background':'grey'});
 }
+function resetIndOrg(){
+  $('#ind_pup').css({'background':'grey'});
+  $('#ind_pdw').css({'background':'grey'});
+  $('#ind_wup').css({'background':'grey'});
+}
 
 let writeQueue=[];
+let requestWdt=null;
 
 let canvas,context;
 
@@ -102,14 +153,17 @@ let BrkX=[];
 let BrkY=[];
 let BrkC=-1;
 let WavX=[];
+let WavT=[];
 let WavY1=[];
 let WavY2=[];
 let WavY3=[];
 let RangeX=[0,800];
 let RangeY1=[0,6*1000];
 let RangeY2=[-3*100,3*100];
-let RangeY3=[-3*1000,3*1000];
+let RangeY3=[-3*200,3*200];
 let RangeB=[0,6*100];
+let CastStats=[0,0,0];
+let MaxV;
 
 function drawAll(){
   gridPlot(8,6);
@@ -119,6 +173,7 @@ function drawAll(){
   polyPlot(BrkX,BrkY,RangeX,RangeB,'blue');
   circlePlot(BrkX[BrkC],BrkY[BrkC],RangeX,RangeB,6,'blue');
   textPlot(BrkX[BrkC],BrkY[BrkC],RangeX,RangeB,BrkX[BrkC]+','+BrkY[BrkC],'blue');
+  statsPlot('red');
 }
 function BrkReload(){
   for(let i=0;i<8;i++){
@@ -126,6 +181,25 @@ function BrkReload(){
     BrkY[i]=$('#rom input').eq(2*i+BrkTbl+1).val();
     BrkX[i]=Math.floor(x+x*x/128);
   }
+}
+function mapper(x,y,xc){
+  let N=x.length-1;
+  if(xc<x[0]) return y[0];
+  if(xc>x[N]) return 0;
+  let i=0,x0,x1;
+  for(;i<N;i++){
+    x0=x[i];
+    x1=x[i+1];
+    if(x0<=xc && xc<=x1) break;
+  }
+  let yc=(y[i+1]*(xc-x0)+y[i]*(x1-xc))/(x1-x0);
+  return yc;
+}
+function calcStats(x,y,t1,t2){
+  let sum=0;
+  if(t2>400) t2=400;
+  for(let t=t1;t<t2;t++) sum+=mapper(x,y,t);
+  return sum*100/(t2-t1);
 }
 
 $(document).ready(function(){
@@ -136,6 +210,7 @@ $(document).ready(function(){
   canvas=$("#plot").get(0);
   context=canvas.getContext('2d');
   canvas.width=$('#plot').width();
+  $('#plot').height(canvas.width*0.7);
   canvas.height=$('#plot').height();
   drawAll();
 
@@ -161,13 +236,19 @@ $(document).ready(function(){
 	$('#discon').click(function(event){
 		BTLE.discon();
 	});
-	$('#set0').click(function(event){
-    let par=ParamBuf=Param[0].clone();
+	$('.setbrk').click(function(event){
+    let idx=$('.setbrk').index(this);
+    let par=ParamBuf=Param[idx].concat();
     for(let i=0;i<par.length;i++){
       let tg=$('#rom input').eq(i);
-      tg.val(par[i]);
-      tg.css({'color':'red'});
+      let tv=tg.val();
+      if(tv=='' || tv!=par[i]){
+        tg.val(par[i]);
+        tg.css({'color':'red'});
+      }
     }
+    BrkReload();
+    drawAll();
 	});
 	$('#plot').click(function(event){
     let x=event.pageX-$(event.target).offset().left;
@@ -183,10 +264,18 @@ $(document).ready(function(){
     }
     drawAll();
 	});
+  $('#mode_easy').click(function(){
+    $('#show_easy').css({display:'block'});
+    $('#show_detail').css({display:'none'});
+  });
+  $('#mode_detail').click(function(){
+    $('#show_easy').css({display:'none'});
+    $('#show_detail').css({display:'block'});
+  });
   $('#up').click(function(event){
     if(BrkC>=0){
       let y=Math.floor(BrkY[BrkC]*1.05);
-      if(y>255) y=255;
+      if(y>250) y=250;
       if(BrkY[BrkC]<y) BrkY[BrkC]=y;
       else BrkY[BrkC]++;
       let tg=$('#rom input').eq(2*BrkC+BrkTbl+1);
@@ -232,6 +321,68 @@ $(document).ready(function(){
       drawAll();
     }
   });
+  function path1(){
+    let k=Math.pow(BrkY[4]/BrkY[1],0.45)
+    BrkY[2]=Math.floor(k*BrkY[1]);
+    BrkY[3]=Math.floor(k*BrkY[2]);
+    let h=(BrkX[4]-BrkX[1])/3;
+    BrkX[2]=Math.floor(BrkX[1]+h);
+    BrkX[3]=Math.floor(BrkX[2]+h);
+    for(let i=0;i<5;i++){
+      let tgx=$('#rom input').eq(2*i+BrkTbl);
+      tgx.val(Math.floor(-64+8*Math.sqrt(64+2*BrkX[i])));
+  		tgx.css({'color':'red'});
+      let tgy=$('#rom input').eq(2*i+BrkTbl+1);
+      tgy.val(BrkY[i]);
+  		tgy.css({'color':'red'});
+    }
+    drawAll();
+  }
+  function path2(){
+    let k=Math.pow(BrkY[7]/BrkY[4],0.5)
+    BrkY[5]=Math.floor(k*BrkY[4]);
+    BrkY[6]=Math.floor(k*BrkY[5]);
+    let h=(BrkX[7]-BrkX[4])/3;
+    BrkX[5]=Math.floor(BrkX[4]+h);
+    BrkX[6]=Math.floor(BrkX[5]+h);
+    for(let i=4;i<7;i++){
+      let tgx=$('#rom input').eq(2*i+BrkTbl);
+      tgx.val(Math.floor(-64+8*Math.sqrt(64+2*BrkX[i])));
+  		tgx.css({'color':'red'});
+      let tgy=$('#rom input').eq(2*i+BrkTbl+1);
+      tgy.val(BrkY[i]);
+  		tgy.css({'color':'red'});
+    }
+    drawAll();
+  }
+  $('#up1').click(function(event){
+    let y=Math.floor(BrkY[0]*1.05);
+    if(y>250) y=250;
+    if(BrkY[0]==y) y=BrkY[0]+1;
+    BrkY[0]=BrkY[1]=y;
+    path1();
+  });
+  $('#down1').click(function(event){
+    let y=Math.floor(BrkY[0]*0.95);
+    if(BrkY[0]==y && y>0) y=BrkY[0]-1;
+    BrkY[0]=BrkY[1]=y;
+    path1();
+  });
+  $('#up2').click(function(event){
+    let y=Math.floor(BrkY[4]*1.05);
+    if(y>255) y=255;
+    if(BrkY[4]==y) y=BrkY[4]+1;
+    BrkY[4]=y;
+    path1();
+    path2();
+  });
+  $('#down2').click(function(event){
+    let y=Math.floor(BrkY[4]*0.95);
+    if(BrkY[4]==y && y>0) y=BrkY[4]-1;
+    BrkY[4]=y;
+    path1();
+    path2();
+  });
 	$('#rom input').change(function(e){
 	  let en=$('#rom input').index(e.target);
 	  let tg=$(e.target);
@@ -260,6 +411,7 @@ $(document).ready(function(){
         let q=writeQueue.shift();
         BTLE.write3(0xA000|q.address,q.value);
         $('#ind_pdw').css({'background':'orange'});
+        requestWdt=setTimeout(resetIndOrg,1000);
       }
       else BTLE.ready();
     }
@@ -267,8 +419,11 @@ $(document).ready(function(){
   $('#cancel').click(function(event){
     for(let i=0;i<ParamBuf.length;i++){
   	  let tg=$('#rom input').eq(i);
-      tg.val(ParamBuf[i]);
-      tg.css({'color':''});
+      let tv=tg.val();
+      if(tv!=ParamBuf[i]){
+        tg.val(ParamBuf[i]);
+        tg.css({'color':''});
+      }
     }
     BrkReload();
     drawAll();
@@ -336,22 +491,34 @@ $(document).ready(function(){
     if(this.timeout!=null) clearTimeout(this.timeout);
     if(det==0){
       if(this.wrevs>des){
-        WavX=[]; WavY1=[]; WavY2=[]; WavY3=[];
+        WavX=[]; WavT=[]; WavY1=[]; WavY2=[]; WavY3=[];
+        MaxV=0;
         $('#ind_wup').css({'background':'orange'});
-    }
-      WavX.push(this.wrevs=des);
-//    WavX.push(data.getUint16(2));
-      WavY1.push(Math.PI*2e6/data.getUint16(4));
-      WavY2.push(data.getUint16(6));
-      WavY3.push(data.getInt16(8));
+      }
+      WavX.push(this.wrevs=des);  //revs
+      WavT.push(data.getUint16(2));  //elapsed time
+      let v=Math.PI*2e6/data.getUint16(4); //dt
+      if(MaxV<v) MaxV=v;
+      WavY1.push(v);
+      WavY2.push(data.getUint16(6));  //duty
+      WavY3.push(data.getInt16(8));  //tension
       let who=this;
       this.timeout=setTimeout(function(){
         console.log('wave received '+WavX.length);
         $('#ind_wup').css({'background':'grey'});
         who.emit('wdone');
-        drawAll();
+        if(WavT.length>2){
+          const t0=WavT[0];
+          for(let i=0;i<WavT.length;i++) WavT[i]-=t0;
+          const N=WavX[WavX.length-1];
+          CastStats[0]=calcStats(WavX,WavY3,50,100);
+          CastStats[1]=calcStats(WavX,WavY3,100,N);
+          CastStats[2]=MaxV-calcStats(WavX,WavY1,100,101)/100;
+          console.log('stats:'+CastStats[0]+','+CastStats[1]);
+          drawAll();
+        }
         who.timeout=null;
-      },300);
+      },1000);
     }
     else if(det==0xB000){  //Param read (max.8 bytes)
       let key=des&0xFFF;
@@ -373,6 +540,7 @@ $(document).ready(function(){
       },300);
     }
     else if(det==0xA000){
+      if(requestWdt!=null) clearTimeout(requestWdt);
       let key=des&0xFFF;
       console.log('write verify:'+key);
       if(key!=0xFFF){
@@ -383,6 +551,7 @@ $(document).ready(function(){
       if(writeQueue.length>0){
         let q=writeQueue.shift();
         BTLE.write3(0xA000|q.address,q.value);
+        requestWdt=setTimeout(resetIndOrg,1000);
       }
       else $('#ind_pdw').css({'background':'grey'});
     }
@@ -447,7 +616,7 @@ const circlePlot=function(xw,yw,xr,yr,rad,col){
 }
 const textPlot=function(xw,yw,xr,yr,str,col){
 	context.fillStyle=col;
-	context.font="20px";
+  context.font = "12px sans-serif";
   let p=coordPlot(xw,yw,xr,yr);
   context.fillText(str,p.x-20,p.y-20);
 	context.stroke();
@@ -459,6 +628,13 @@ const coordPlot=function(xw,yw,xr,yr){
     x:(xw-xr[0])/(xr[1]-xr[0])*w+marginPlot,
 	  y:h-(yw-yr[0])/(yr[1]-yr[0])*h+marginPlot
   };
+}
+const statsPlot=function(col){
+  let str=Math.floor(CastStats[0])+'    '+Math.floor(CastStats[1])+'    '+Math.floor(CastStats[2]);
+	context.fillStyle=col;
+  context.font = "italic bold 20px sans-serif";
+	context.fillText(str,marginPlot,canvas.height);
+	context.stroke();
 }
 
 

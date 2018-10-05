@@ -25,6 +25,10 @@
 #define DO_LED      LATCbits.LC1
 #define TR_LED      TRISCbits.RC1
 
+#define WAVEREC_DIVS    3
+#define WAVEREC_MAX     ((1<<WAVEREC_DIVS)*50)
+#define WAVEREC_MASK    ((1<<WAVEREC_DIVS)-1)
+
 static unsigned char r2buf[20];//comm buffer from DC
 static unsigned char r1buf[50];//comm buffer to/from RN4xxx
 static unsigned char deviceID[15];
@@ -35,6 +39,7 @@ static unsigned short Timer[]={0,0,0,0,0};//wallet scan,adv off,discon,battery
 static unsigned short CT_reg1,CT_reg2;
 static unsigned short CT_wque=0,CT_wreg1=0,CT_wreg2=0;
 static unsigned short CT_rev=0;
+static unsigned char *CT_ptr;
 static unsigned short CT_pwm;
 static unsigned long CT_dt,CT_time;
 signed long CT_tens;
@@ -279,20 +284,17 @@ WAVREC:
     CT_rev=CT_pwm=CT_dt=CT_tens=0;
     *(unsigned short *)CT_buf=0;
 WAVREC_LOOP:
-    CT_time=((unsigned long)r2buf[2]<<16)+((unsigned short)r2buf[3]<<8)+r2buf[4];
-    CT_pwm+=r2buf[10];
-    CT_dt+=((unsigned short)r2buf[7]<<8)+r2buf[8];
-    CT_tens+=((short)(signed char)r2buf[13]<<8)+r2buf[14];
-    if((CT_rev&0x0F)==0x0F){
-        int tmsec=CT_time>>8;
-        int rev=CT_rev<800? CT_rev:800;
-        char *buf=CT_buf+(rev>>4)*10;
-        *(unsigned short *)buf=rev;
-        *(unsigned short *)(buf+2)=tmsec;
-        *(unsigned short *)(buf+4)=CT_dt>>4;
-        *(unsigned short *)(buf+6)=CT_pwm>>4;
-        *(signed short *)(buf+8)=CT_tens>>4;
-        *(unsigned short *)(buf+10)=0;
+    CT_ptr=CT_buf+(CT_rev<WAVEREC_MAX? CT_rev>>WAVEREC_DIVS:WAVEREC_MAX>>WAVEREC_DIVS)*10;
+    *(unsigned short *)CT_ptr=CT_rev;
+    CT_time=*(unsigned short *)(CT_ptr+2)=(((unsigned long)r2buf[2]<<16)+((unsigned short)r2buf[3]<<8)+r2buf[4])>>8;
+    CT_dt+=*(unsigned short *)(CT_ptr+4)=((unsigned short)r2buf[7]<<8)+r2buf[8];
+    CT_pwm+=*(unsigned short *)(CT_ptr+6)=r2buf[10];
+    CT_tens+=*(signed short *)(CT_ptr+8)=((short)(signed char)r2buf[13]<<8)+r2buf[14];
+    *(unsigned short *)(CT_ptr+10)=0;     //Data end marker
+    if(CT_rev<WAVEREC_MAX && (CT_rev&WAVEREC_MASK)==WAVEREC_MASK){
+        *(unsigned short *)(CT_ptr+4)=CT_dt>>WAVEREC_DIVS;
+        *(unsigned short *)(CT_ptr+6)=CT_pwm>>WAVEREC_DIVS;
+        *(signed short *)(CT_ptr+8)=CT_tens>>WAVEREC_DIVS;
         CT_pwm=CT_dt=CT_tens=0;
     }
     CT_rev++;
@@ -306,6 +308,7 @@ WAVREC_LOOP:
     VSO_puts("CT_done:");VSO_putd(CT_rev);VSO_cr();
     if(ModQ==201) goto ADVERTISE;
     else{
+        VSO_puts("Try CT_send\n");
         CT_send();
         goto CONNECT;
     }
