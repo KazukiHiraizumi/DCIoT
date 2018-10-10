@@ -41,23 +41,18 @@
 
 <body>
 <button id="discon">切断</button>
-<button class="setbrk">SET-0</button><button class="setbrk">SET-1</button><br clear="all">
+<button class="setbrk">SET-0</button><button class="setbrk">SET-1</button>
+<button id="cancel" style="float:right;">キャンセル</button><br clear="all">
 
 <div style="width:100%;background-color:ivory">
 <canvas id="plot" style="width:100%;height:100%;background-color:ivory" ></canvas>
 </div>
 <div>
 <table id="control" width="100%">
-<tr><td style="width:50%;">
-<table style="width:100%;">
-<tr><td style="width:50%;"><button id="write">送信</button>
-<td style="width:50%;"><button id="cancel">キャンセル</button>
-<td rowspan="2">&nbsp;
-<tr><td colspan="2">
+<tr><td style="width:25%;">
 <input type="radio" name="mode" checked id="mode_easy">Easy<br>
 <input type="radio" name="mode" id="mode_detail">Detail<br>
-</table>
-<td style="width:50%;">
+<td style="width:60%;">
 <div id="show_easy" style="display:block;">
 <table style="width:100%;">
 <tr><td style="width:50%;"><button id="up1">↑</button><td style="width:50%;"><button id="up2">↑</button>
@@ -86,35 +81,30 @@
 
 <script type="module">
 //Defaut param//
-let Param=[
+let ParamCommon=[
+  0,30,20,242,10,255,255,255,
+  120,133,5,2,0,255,128,255,
+  100,23,100,255,255,166,133,96,
+  255,5,5,255,255,255,255,255,
+  255,255,255,255,255,255,255,255,
+  255,255,255,255,255,255,255,255,
+  255,0,1,255,255,255,255,255
+];
+let ParamUniq=[
   [90,7,50,50,100,20,200,50,
   0,10,50,10,150,10,255,10,
   25,25,0,0,35,0,0,0,
   0,240,25,240,45,200,65,150,
   98,102,142,89,200,40,255,40,
   0,50,100,100,200,200,255,255,
-  0,0,10,0,50,0,255,0,
-  0,30,20,242,10,255,255,255,
-  120,133,5,2,0,255,128,255,
-  100,23,100,255,255,166,133,96,
-  255,5,5,255,255,255,255,255,
-  255,255,255,255,255,255,255,255,
-  255,255,255,255,255,255,255,255,
-  255,0,1,255,255,255,255,255],
+  0,0,10,0,50,0,255,0],
   [90,7,50,50,100,20,200,10,
   0,50,20,50,30,20,255,10,
   25,25,0,0,100,0,0,0,
   0,240,25,240,72,171,107,122,
   136,114,182,67,221,39,255,40,
   0,100,150,255,255,255,255,255,
-  0,70,35,70,70,170,255,170,
-  0,30,20,242,10,255,255,255,
-  120,133,5,2,0,255,128,255,
-  100,23,100,255,255,166,133,96,
-  255,5,5,255,255,255,255,255,
-  255,255,255,255,255,255,255,255,
-  255,255,255,255,255,255,255,255,
-  255,0,1,255,255,255,255,255]
+  0,70,35,70,70,170,255,170]
 ];
 let ParamBuf=[];
 
@@ -230,15 +220,27 @@ $(document).ready(function(){
 
 	$('#connect').click(function(event){
 		if(isWebBluetoothEnabled()) {
-			BTLE.ready();
-		}
+      if(!BTLE.link){
+        $('#connect').text('接続処理中');
+        BTLE.ready();
+      }
+      else{
+        writeQueue=checkQueue();
+        if(writeQueue.length>0){
+          let q=writeQueue.shift();
+          BTLE.write3(0xA000|q.address,q.value);
+          $('#ind_pdw').css({'background':'orange'});
+          requestWdt=setTimeout(resetIndOrg,1000);
+        }
+      }
+    }
 	});
 	$('#discon').click(function(event){
 		BTLE.discon();
 	});
 	$('.setbrk').click(function(event){
     let idx=$('.setbrk').index(this);
-    let par=ParamBuf=Param[idx].concat();
+    let par=ParamBuf=ParamUniq[idx].concat(ParamCommon);
     for(let i=0;i<par.length;i++){
       let tg=$('#rom input').eq(i);
       let tv=tg.val();
@@ -404,18 +406,6 @@ $(document).ready(function(){
     });
     return queue;
   }
-  $('#write').click(function(event){
-    writeQueue=checkQueue();
-    if(writeQueue.length>0){
-      if(BTLE.link){
-        let q=writeQueue.shift();
-        BTLE.write3(0xA000|q.address,q.value);
-        $('#ind_pdw').css({'background':'orange'});
-        requestWdt=setTimeout(resetIndOrg,1000);
-      }
-      else BTLE.ready();
-    }
-  });
   $('#cancel').click(function(event){
     for(let i=0;i<ParamBuf.length;i++){
   	  let tg=$('#rom input').eq(i);
@@ -431,6 +421,7 @@ $(document).ready(function(){
 
   BTLE.on('ready',function(){
     console.log('BLE ready');
+    $('#connect').text('書込');
     this.write2(0xFC01);//wave upload req
     $('#ind_wup').css({'background':'orange'});
     const who=this;
@@ -445,14 +436,6 @@ $(document).ready(function(){
           $('#ind_pup').css({'background':'grey'});
         },500);
       }
-      else{
-        let q=writeQueue.shift();
-        who.write3(0xA000|q.address,q.value);
-        $('#ind_pdw').css({'background':'orange'});
-        who.timeout=setTimeout(function(){
-          $('#ind_pdw').css({'background':'grey'});
-        },500);
-      }
       who.off('wdone');
     });
     this.timeout=setTimeout(function(){
@@ -462,10 +445,17 @@ $(document).ready(function(){
   });
   BTLE.on('disconnect',function(){
     resetInd();
+    $('#connect').text('接続準備中');
+    setTimeout(function(){
+      $('#connect').text('接続');
+    },5000);
   });
   BTLE.on('error',function(err){
     resetInd();
-    console.log('btle err:'+err);
+    $('#connect').text('エラー復帰中');
+    setTimeout(function(){
+      $('#connect').text('接続');
+    },5000);
   });
   BTLE.on('connect',function(err){
     $('#ind_dev').css({'background':'cyan'});
