@@ -365,6 +365,8 @@ void USART2_putc(unsigned char c){
 }
 void USART2_cmd(int cmd,unsigned char *dat,int n){
     unsigned int sum;
+    USART2_TxTRIS=0;
+//    xdelay(1);
     USART2_sum=0;
     USART2_putc(2);//STX
     USART2_putc(0);//Timestamp
@@ -375,6 +377,7 @@ void USART2_cmd(int cmd,unsigned char *dat,int n){
     USART2_putc(cmd);
     for(;n>0;n--,dat++) USART2_putc(*dat);
     USART2_putc(sum=(-USART2_sum)&0xFF);
+    USART2_TxTRIS=1;
 }
 int USART2_getc(){
     if(USART2_rbufw!=USART2_rbufr){
@@ -413,8 +416,7 @@ void USART2_init(unsigned long bps){
     BAUDCON2bits.BRG16=1;
     SPBRG2=brg&0xFF;
     SPBRGH2=brg>>8;
-    USART2_Tx=1;
-    USART2_TxTRIS=0;
+    USART2_TxTRIS=1;
     USART2_RxTRIS=1;
     TXSTA2bits.TXEN=1;
     RCSTA2bits.CREN=0;

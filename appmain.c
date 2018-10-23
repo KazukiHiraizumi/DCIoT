@@ -167,6 +167,7 @@ Reset:
     rn487x_prog("V\n");
 //App inits
     USART2_init(230400L);
+//    USART2_init(222220L);
     TMR1_init();//32kHz
 }
 

@@ -14,9 +14,9 @@ extern "C" {
 #pragma config FCMEN    = OFF
 #pragma config IESO     = OFF
 #pragma config PWRTEN   = ON
-#pragma config BOREN    = SBORDIS
-#pragma config BORV     = 18
-#pragma config WDTEN    = SWON
+#pragma config BOREN    = ON
+#pragma config BORV     = 19
+#pragma config WDTEN    = OFF
 #pragma config WDTPS    = 256
 #pragma config CCP2MX   = PORTC1
 #pragma config PBADEN   = OFF
