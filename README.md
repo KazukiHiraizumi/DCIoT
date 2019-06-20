@@ -33,3 +33,14 @@ debuild -b -j4
 cd ..
 sudo dpkg -i *.deb
 ~~~
+
+## KEL-0271 USBコネクタ
+
+![USB type-A Female](mig.jpeg)
+
+|pin|description|
+|:----|:----|
+|1|+V|
+|2|Tx|
+|3|Rx|
+|4|Gnd|

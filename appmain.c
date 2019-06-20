@@ -115,8 +115,15 @@ static void power_on(){
         LATBbits.LB5=1;
         TRISBbits.RB4=0;
         TRISBbits.RB5=0;
+        /*LATBbits.LB2=0;
+        TRISBbits.RB2=0;*/
         xdelay(100);
     }
+}
+static void power_off(){
+    TRISBbits.RB4=1;
+    TRISBbits.RB5=1;
+//    TRISBbits.RB2=1;
 }
 void setup(){
     int i,j,k;
@@ -373,8 +380,7 @@ T2UP://disconnect timer
     }
 T3UP://power off
     if(Timer[3]==0) goto T4UP; else if(--Timer[3]>0) goto T4UP;
-    TRISBbits.RB4=1;
-    TRISBbits.RB5=1;
+    power_off();
     VSO_puts("Power off\n");
 T4UP://auto advertise timer
     if(Timer[4]==0) goto T5UP; else if(--Timer[4]>0) goto T5UP;
