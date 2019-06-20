@@ -1,0 +1,3 @@
+#!/bin/bash
+
+cat dc10.html | sed -e's/\/\/start-default/\/*/' | sed -e's/\/\/end-default/*\//' | sed -e '/start-alt1/d' | sed -e '/end-alt1/d' >dct.html

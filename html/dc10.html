@@ -102,7 +102,7 @@ function isWebBluetoothEnabled(){
 import FileMan from "./fileman.js";
 
 //Param selection//
-/*
+//start-default
 let ParamDefault=[
   90,5,0,50,100,20,30,0,
   0,255,85,170,170,85,255,0,
@@ -119,7 +119,8 @@ let ParamDefault=[
   255,255,255,255,255,255,255,255,
   255,0,1,255,255,255,255,255
 ];
-*/
+//end-default
+/*start-alt1
 let ParamDefault=[
   90,5,0,50,100,20,30,0,
   0,255,85,170,170,85,255,0,
@@ -136,6 +137,7 @@ let ParamDefault=[
   255,255,255,255,255,255,255,255,
   255,0,1,255,255,255,255,255
 ];
+end-alt1*/
 let ParamBuf=[];
 
 //Main
@@ -179,7 +181,7 @@ function drawAll(){
   textPlot(BrkX[BrkC],BrkY[BrkC],RangeX,RangeB,BrkX[BrkC]+','+BrkY[BrkC],'blue');
   statsPlot('red');
 }
-/*
+//start-default
 function BrkReload(){
   for(let i=0;i<8;i++){
     let x=Number($('#rom input').eq(2*i+BrkTbl).val());
@@ -187,7 +189,8 @@ function BrkReload(){
     BrkX[i]=Math.floor(x*10);
   }
 }
-*/
+//end-default
+/*start-alt1
 function BrkReload(){
   for(let i=0;i<8;i++){
     let x=Number($('#rom input').eq(2*i+BrkTbl).val());
@@ -195,6 +198,7 @@ function BrkReload(){
     BrkX[i]=Math.floor(x+x*x/128);
   }
 }
+end-alt1*/
 function mapper(x,y,xc){
   let N=x.length-1;
   if(xc<x[0]) return y[0];
@@ -330,7 +334,7 @@ $(document).ready(function(){
       drawAll();
     }
   });
-/*
+//start-default
   $('#left').click(function(event){
     if(BrkC>0 && BrkC<7){
       let x1=Math.floor(BrkX[BrkC]*0.95);
@@ -353,7 +357,8 @@ $(document).ready(function(){
       drawAll();
     }
   });
-*/
+//end-default
+/*start-alt1
   $('#left').click(function(event){
     if(BrkC>0 && BrkC<7){
       let x1=BrkX[BrkC]*0.95;
@@ -380,7 +385,8 @@ $(document).ready(function(){
       drawAll();
     }
   });
-/*
+end-alt1*/
+//start-default
   function path1(){
     let k=Math.pow(BrkY[4]/BrkY[1],0.45)
     BrkY[2]=Math.floor(k*BrkY[1]);
@@ -415,7 +421,8 @@ $(document).ready(function(){
     }
     drawAll();
   }
-*/
+//end-default
+/*start-alt1
   function path1(){
     let k=Math.pow(BrkY[4]/BrkY[1],0.45)
     BrkY[2]=Math.floor(k*BrkY[1]);
@@ -450,6 +457,7 @@ $(document).ready(function(){
     }
     drawAll();
   }
+end-alt1*/
   $('#up1').click(function(event){
     let y=Math.floor(BrkY[0]*1.05);
     if(y>250) y=250;
