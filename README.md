@@ -1,5 +1,4 @@
 # DCIoT
-Wireless logging unit for DC reels
 
 ## WebBluetoothを使う
   html/dct.htmlがWebBluetoothを使ったWebアプリ版BLEクライアントです。WebBluetoothはソースがhttps://...以外では動作しません。  
